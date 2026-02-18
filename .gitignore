@@ -1,0 +1,16 @@
+# Binary
+/tramuntana
+*.exe
+
+# Environment
+.env
+
+# Go
+vendor/
+*.test
+*.out
+
+# Editor
+*.swp
+*.swo
+*~
