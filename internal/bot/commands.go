@@ -110,32 +110,27 @@ func (b *Bot) handleHistory(msg *tgbotapi.Message) {
 
 // handleProject binds a topic to a Minuano project.
 func (b *Bot) handleProject(msg *tgbotapi.Message) {
-	// Placeholder — will be fully implemented in Task 25
-	b.reply(msg.Chat.ID, getThreadID(msg), "/project not yet implemented.")
+	b.handleProjectCommand(msg)
 }
 
 // handleTasks shows Minuano tasks.
 func (b *Bot) handleTasks(msg *tgbotapi.Message) {
-	// Placeholder — will be fully implemented in Task 25
-	b.reply(msg.Chat.ID, getThreadID(msg), "/tasks not yet implemented.")
+	b.handleTasksCommand(msg)
 }
 
 // handlePick picks a Minuano task.
 func (b *Bot) handlePick(msg *tgbotapi.Message) {
-	// Placeholder — will be fully implemented in Task 25
-	b.reply(msg.Chat.ID, getThreadID(msg), "/pick not yet implemented.")
+	b.handlePickCommand(msg)
 }
 
 // handleAuto auto-claims a Minuano task.
 func (b *Bot) handleAuto(msg *tgbotapi.Message) {
-	// Placeholder — will be fully implemented in Task 25
-	b.reply(msg.Chat.ID, getThreadID(msg), "/auto not yet implemented.")
+	b.handleAutoCommand(msg)
 }
 
 // handleBatch runs batch Minuano tasks.
 func (b *Bot) handleBatch(msg *tgbotapi.Message) {
-	// Placeholder — will be fully implemented in Task 25
-	b.reply(msg.Chat.ID, getThreadID(msg), "/batch not yet implemented.")
+	b.handleBatchCommand(msg)
 }
 
 // handleTopicClose handles forum topic close events.

@@ -9,6 +9,7 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/otaviocarvalho/tramuntana/internal/config"
+	"github.com/otaviocarvalho/tramuntana/internal/minuano"
 	"github.com/otaviocarvalho/tramuntana/internal/state"
 	"github.com/otaviocarvalho/tramuntana/internal/tmux"
 )
@@ -28,6 +29,8 @@ type Bot struct {
 	windowPickerStates map[int64]*windowPickerState
 	// Monitor state (set by serve command when monitor is started)
 	monitorState *state.MonitorState
+	// Minuano CLI bridge
+	minuanoBridge *minuano.Bridge
 }
 
 // New creates a new Bot instance.
@@ -58,6 +61,7 @@ func New(cfg *config.Config) (*Bot, error) {
 		browseStates:       make(map[int64]*BrowseState),
 		windowCache:        make(map[int64][]tmux.Window),
 		windowPickerStates: make(map[int64]*windowPickerState),
+		minuanoBridge:      minuano.NewBridge(cfg.MinuanoBin, cfg.MinuanoDB),
 	}, nil
 }
 
