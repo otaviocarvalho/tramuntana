@@ -26,6 +26,8 @@ type Bot struct {
 	windowCache map[int64][]tmux.Window
 	// Per-user window picker state
 	windowPickerStates map[int64]*windowPickerState
+	// Monitor state (set by serve command when monitor is started)
+	monitorState *state.MonitorState
 }
 
 // New creates a new Bot instance.

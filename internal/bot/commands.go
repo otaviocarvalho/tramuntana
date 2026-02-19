@@ -1,7 +1,14 @@
 package bot
 
 import (
+	"log"
+	"path/filepath"
+	"strconv"
+	"strings"
+
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/otaviocarvalho/tramuntana/internal/state"
+	"github.com/otaviocarvalho/tramuntana/internal/tmux"
 )
 
 // handleCommand routes slash commands.
@@ -30,16 +37,65 @@ func (b *Bot) handleCommand(msg *tgbotapi.Message) {
 	}
 }
 
+// resolveWindow returns the window ID for the user's thread, or empty string if unbound.
+func (b *Bot) resolveWindow(msg *tgbotapi.Message) (string, bool) {
+	userID := strconv.FormatInt(msg.From.ID, 10)
+	threadID := strconv.Itoa(getThreadID(msg))
+	return b.state.GetWindowForThread(userID, threadID)
+}
+
 // forwardCommand sends a command as text to the bound tmux window.
 func (b *Bot) forwardCommand(msg *tgbotapi.Message) {
-	// Placeholder — will be fully implemented in Task 11
-	b.reply(msg.Chat.ID, getThreadID(msg), "Command forwarding not yet implemented.")
+	windowID, bound := b.resolveWindow(msg)
+	if !bound {
+		b.reply(msg.Chat.ID, getThreadID(msg), "Topic not bound to a session. Send a message to bind.")
+		return
+	}
+
+	cmdText := "/" + msg.Command()
+	if err := tmux.SendKeysWithDelay(b.config.TmuxSessionName, windowID, cmdText, 500); err != nil {
+		log.Printf("Error forwarding command %s to %s: %v", cmdText, windowID, err)
+		b.reply(msg.Chat.ID, getThreadID(msg), "Error: failed to send command.")
+		return
+	}
+
+	// Special handling for /clear: reset session monitoring state
+	if msg.Command() == "clear" {
+		b.resetSessionTracking(windowID)
+	}
+}
+
+// resetSessionTracking clears session monitor state for a window after /clear.
+func (b *Bot) resetSessionTracking(windowID string) {
+	// Remove window state's session info so the monitor starts fresh
+	// The monitor_state.json offset will be reset when the new JSONL file appears
+	if b.monitorState != nil {
+		// Find the session key that matches this window
+		sessionMapPath := filepath.Join(b.config.TramuntanaDir, "session_map.json")
+		sm, err := loadSessionMapForReset(sessionMapPath)
+		if err != nil {
+			return
+		}
+		for key := range sm {
+			if windowIDFromKey(key) == windowID {
+				b.monitorState.RemoveSession(key)
+			}
+		}
+	}
 }
 
 // handleEsc sends Escape key to tmux.
 func (b *Bot) handleEsc(msg *tgbotapi.Message) {
-	// Placeholder — will be fully implemented in Task 11
-	b.reply(msg.Chat.ID, getThreadID(msg), "/esc not yet implemented.")
+	windowID, bound := b.resolveWindow(msg)
+	if !bound {
+		b.reply(msg.Chat.ID, getThreadID(msg), "Topic not bound to a session.")
+		return
+	}
+
+	if err := tmux.SendSpecialKey(b.config.TmuxSessionName, windowID, "Escape"); err != nil {
+		log.Printf("Error sending Escape to %s: %v", windowID, err)
+		b.reply(msg.Chat.ID, getThreadID(msg), "Error: failed to send Escape.")
+	}
 }
 
 // handleScreenshot captures and sends a terminal screenshot.
@@ -87,4 +143,22 @@ func (b *Bot) handleBatch(msg *tgbotapi.Message) {
 // handleTopicClose handles forum topic close events.
 func (b *Bot) handleTopicClose(msg *tgbotapi.Message) {
 	// Placeholder — will be fully implemented in Task 12
+}
+
+// SetMonitorState sets the monitor state reference (called by serve command).
+func (b *Bot) SetMonitorState(ms *state.MonitorState) {
+	b.monitorState = ms
+}
+
+// loadSessionMapForReset loads session_map.json for the /clear reset logic.
+func loadSessionMapForReset(path string) (map[string]state.SessionMapEntry, error) {
+	return state.LoadSessionMap(path)
+}
+
+// windowIDFromKey extracts the window ID from a session map key ("session:@N" → "@N").
+func windowIDFromKey(key string) string {
+	if idx := strings.LastIndex(key, ":"); idx >= 0 {
+		return key[idx+1:]
+	}
+	return key
 }
