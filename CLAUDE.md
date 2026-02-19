@@ -87,49 +87,49 @@ Implementation follows the ordered tasks in `tasks/`. **Always work sequentially
 
 Track which task you're on. When you complete a task, note it here:
 
-- [ ] 01 — Project Initialization
-- [ ] 02 — Configuration
-- [ ] 03 — Tmux Package
-- [ ] 04 — State Management
-- [ ] 05 — Hook
-- [ ] 06 — CLI Skeleton
-- [ ] 07 — Bot Setup
-- [ ] 08 — Text Handler
-- [ ] 09 — Directory Browser
-- [ ] 10 — Window Picker
-- [ ] 11 — Claude Commands
-- [ ] 12 — Topic Close
-- [ ] 13 — JSONL Transcript Parser
-- [ ] 14 — Tool Result Formatting
-- [ ] 15 — Markdown to MarkdownV2
-- [ ] 16 — Message Queue
-- [ ] 17 — Session Monitor
-- [ ] 18 — Status Polling
-- [ ] 19 — Interactive UI
-- [ ] 20 — Screenshot Rendering
-- [ ] 21 — Screenshot Command
-- [ ] 22 — History Command
-- [ ] 23 — Bash Capture
-- [ ] 24 — Minuano Bridge
-- [ ] 25 — Minuano Commands
-- [ ] 26 — Startup Recovery & Polish
+- [x] 01 — Project Initialization
+- [x] 02 — Configuration
+- [x] 03 — Tmux Package
+- [x] 04 — State Management
+- [x] 05 — Hook
+- [x] 06 — CLI Skeleton
+- [x] 07 — Bot Setup
+- [x] 08 — Text Handler
+- [x] 09 — Directory Browser
+- [x] 10 — Window Picker
+- [x] 11 — Claude Commands
+- [x] 12 — Topic Close
+- [x] 13 — JSONL Transcript Parser
+- [x] 14 — Tool Result Formatting
+- [x] 15 — Markdown to MarkdownV2
+- [x] 16 — Message Queue
+- [x] 17 — Session Monitor
+- [x] 18 — Status Polling
+- [x] 19 — Interactive UI
+- [x] 20 — Screenshot Rendering
+- [x] 21 — Screenshot Command
+- [x] 22 — History Command
+- [x] 23 — Bash Capture
+- [x] 24 — Minuano Bridge
+- [x] 25 — Minuano Commands
+- [x] 26 — Startup Recovery & Polish
 
 **Integration tasks** (see `tasks/integration/` and `INTEGRATION.md`):
 
 Minuano side (in `/home/otavio/code/minuano`):
-- [ ] I-01 — `--json` flag on `minuano status` and `minuano show`
-- [ ] I-02 — `ClaimByID` query in queries.go
-- [ ] I-03 — Project filter on `AtomicClaim`
-- [ ] I-04 — `minuano-pick` script
-- [ ] I-05 — `--project` flag on `minuano-claim`
-- [ ] I-06 — `minuano prompt` command
+- [x] I-01 — `--json` flag on `minuano status` and `minuano show`
+- [x] I-02 — `ClaimByID` query in queries.go
+- [x] I-03 — Project filter on `AtomicClaim`
+- [x] I-04 — `minuano-pick` script
+- [x] I-05 — `--project` flag on `minuano-claim`
+- [x] I-06 — `minuano prompt` command
 
 Tramuntana side (depends on Minuano I-01..I-06):
-- [ ] I-07 — Update bridge to use `--json`
-- [ ] I-08 — Update commands to use `minuano prompt`
-- [ ] I-09 — E2E test: pick mode
-- [ ] I-10 — E2E test: auto mode
-- [ ] I-11 — E2E test: batch mode
+- [x] I-07 — Update bridge to use `--json`
+- [x] I-08 — Update commands to use `minuano prompt`
+- [ ] I-09 — E2E test: pick mode (manual)
+- [ ] I-10 — E2E test: auto mode (manual)
+- [ ] I-11 — E2E test: batch mode (manual)
 
 ## Conventions
 
