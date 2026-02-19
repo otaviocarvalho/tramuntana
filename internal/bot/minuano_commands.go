@@ -194,6 +194,25 @@ func (b *Bot) sendPromptToTmux(windowID, prompt string) error {
 	return tmux.SendKeysWithDelay(b.config.TmuxSessionName, windowID, ref, 500)
 }
 
+// buildMinuanoEnv returns environment variables to set in tmux windows for Minuano
+// integration. Returns nil if MINUANO_DB is not configured.
+func (b *Bot) buildMinuanoEnv(windowName string) map[string]string {
+	if b.config.MinuanoDB == "" {
+		return nil
+	}
+
+	env := map[string]string{
+		"DATABASE_URL": b.config.MinuanoDB,
+		"AGENT_ID":     fmt.Sprintf("tramuntana-%s", windowName),
+	}
+
+	if b.config.MinuanoScriptsDir != "" {
+		env["PATH"] = fmt.Sprintf("$PATH:%s", b.config.MinuanoScriptsDir)
+	}
+
+	return env
+}
+
 // statusSymbol returns a display symbol for a task status.
 func statusSymbol(status string) string {
 	switch status {

@@ -20,6 +20,7 @@ type Config struct {
 	MonitorPollInterval float64
 	MinuanoBin          string
 	MinuanoDB           string
+	MinuanoScriptsDir   string
 }
 
 func Load(envFile ...string) (*Config, error) {
@@ -82,6 +83,8 @@ func Load(envFile ...string) (*Config, error) {
 		minuanoBin = "minuano"
 	}
 
+	minuanoScriptsDir := os.Getenv("MINUANO_SCRIPTS_DIR")
+
 	return &Config{
 		TelegramBotToken:    token,
 		AllowedUsers:        users,
@@ -92,6 +95,7 @@ func Load(envFile ...string) (*Config, error) {
 		MonitorPollInterval: pollInterval,
 		MinuanoBin:          minuanoBin,
 		MinuanoDB:           os.Getenv("MINUANO_DB"),
+		MinuanoScriptsDir:   minuanoScriptsDir,
 	}, nil
 }
 

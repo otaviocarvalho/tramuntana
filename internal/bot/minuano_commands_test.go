@@ -4,7 +4,49 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/otaviocarvalho/tramuntana/internal/config"
 )
+
+func TestBuildMinuanoEnv(t *testing.T) {
+	t.Run("nil when MinuanoDB empty", func(t *testing.T) {
+		b := &Bot{config: &config.Config{}}
+		env := b.buildMinuanoEnv("mywindow")
+		if env != nil {
+			t.Error("expected nil env when MinuanoDB is empty")
+		}
+	})
+
+	t.Run("sets DATABASE_URL and AGENT_ID", func(t *testing.T) {
+		b := &Bot{config: &config.Config{
+			MinuanoDB: "postgres://localhost/minuano",
+		}}
+		env := b.buildMinuanoEnv("mywindow")
+		if env == nil {
+			t.Fatal("expected non-nil env")
+		}
+		if env["DATABASE_URL"] != "postgres://localhost/minuano" {
+			t.Errorf("DATABASE_URL = %q", env["DATABASE_URL"])
+		}
+		if env["AGENT_ID"] != "tramuntana-mywindow" {
+			t.Errorf("AGENT_ID = %q", env["AGENT_ID"])
+		}
+		if _, ok := env["PATH"]; ok {
+			t.Error("PATH should not be set when MinuanoScriptsDir is empty")
+		}
+	})
+
+	t.Run("includes PATH when scripts dir set", func(t *testing.T) {
+		b := &Bot{config: &config.Config{
+			MinuanoDB:         "postgres://localhost/minuano",
+			MinuanoScriptsDir: "/opt/minuano/scripts",
+		}}
+		env := b.buildMinuanoEnv("mywindow")
+		if !strings.Contains(env["PATH"], "/opt/minuano/scripts") {
+			t.Errorf("PATH = %q, want scripts dir", env["PATH"])
+		}
+	})
+}
 
 func TestStatusSymbol(t *testing.T) {
 	tests := []struct {

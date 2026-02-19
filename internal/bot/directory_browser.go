@@ -249,8 +249,11 @@ func (b *Bot) handleDirConfirm(cq *tgbotapi.CallbackQuery, bs *BrowseState, user
 	// Edit message to show progress
 	b.editMessageText(chatID, bs.MessageID, fmt.Sprintf("Creating session in %s...", shortenPath(selectedPath)))
 
+	// Build Minuano environment if configured
+	env := b.buildMinuanoEnv(filepath.Base(selectedPath))
+
 	// Create new tmux window
-	windowID, err := tmux.NewWindow(b.config.TmuxSessionName, "", selectedPath, b.config.ClaudeCommand, nil)
+	windowID, err := tmux.NewWindow(b.config.TmuxSessionName, "", selectedPath, b.config.ClaudeCommand, env)
 	if err != nil {
 		log.Printf("Error creating window: %v", err)
 		b.editMessageText(chatID, bs.MessageID, "Error: failed to create session.")
