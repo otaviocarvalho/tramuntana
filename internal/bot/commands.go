@@ -141,8 +141,52 @@ func (b *Bot) handleBatch(msg *tgbotapi.Message) {
 }
 
 // handleTopicClose handles forum topic close events.
+// It kills the tmux window and cleans up all related state.
 func (b *Bot) handleTopicClose(msg *tgbotapi.Message) {
-	// Placeholder — will be fully implemented in Task 12
+	threadID := getThreadID(msg)
+	threadIDStr := strconv.Itoa(threadID)
+
+	// Find all users bound to this thread and clean up each binding
+	cleaned := false
+	for _, userID := range b.state.AllUserIDs() {
+		windowID, bound := b.state.GetWindowForThread(userID, threadIDStr)
+		if !bound {
+			continue
+		}
+
+		cleaned = true
+
+		// Kill tmux window (ignore errors — may already be dead)
+		tmux.KillWindow(b.config.TmuxSessionName, windowID)
+
+		// Clean up state
+		b.state.UnbindThread(userID, threadIDStr)
+		b.state.RemoveWindowState(windowID)
+		b.state.RemoveGroupChatID(userID, threadIDStr)
+
+		// Remove monitor state if available
+		if b.monitorState != nil {
+			sessionMapPath := filepath.Join(b.config.TramuntanaDir, "session_map.json")
+			sm, err := loadSessionMapForReset(sessionMapPath)
+			if err == nil {
+				for key := range sm {
+					if windowIDFromKey(key) == windowID {
+						b.monitorState.RemoveSession(key)
+						// Also remove from session_map.json
+						state.RemoveSessionMapEntry(sessionMapPath, key)
+					}
+				}
+			}
+		}
+	}
+
+	// Remove project binding for this thread
+	b.state.RemoveProject(threadIDStr)
+
+	if cleaned {
+		b.saveState()
+		log.Printf("Topic %d closed: cleaned up bindings and killed window", threadID)
+	}
 }
 
 // SetMonitorState sets the monitor state reference (called by serve command).

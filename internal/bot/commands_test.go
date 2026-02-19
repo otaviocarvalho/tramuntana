@@ -130,3 +130,71 @@ func TestHandleCommand_EscRoute(t *testing.T) {
 		t.Errorf("Command() = %q, want esc", msg.Command())
 	}
 }
+
+func TestTopicClose_CleansUpState(t *testing.T) {
+	s := state.NewState()
+
+	// Set up bindings
+	s.BindThread("100", "42", "@5")
+	s.SetWindowState("@5", state.WindowState{SessionID: "abc", CWD: "/tmp", WindowName: "test"})
+	s.SetWindowDisplayName("@5", "test")
+	s.SetGroupChatID("100", "42", -1001234)
+	s.BindProject("42", "myproject")
+
+	// Verify setup
+	if _, ok := s.GetWindowForThread("100", "42"); !ok {
+		t.Fatal("expected binding to exist")
+	}
+
+	// Simulate cleanup (what handleTopicClose does)
+	s.UnbindThread("100", "42")
+	s.RemoveWindowState("@5")
+	s.RemoveGroupChatID("100", "42")
+	s.RemoveProject("42")
+
+	// Verify cleanup
+	if _, ok := s.GetWindowForThread("100", "42"); ok {
+		t.Error("binding should be removed")
+	}
+	if _, ok := s.GetWindowState("@5"); ok {
+		t.Error("window state should be removed")
+	}
+	if _, ok := s.GetWindowDisplayName("@5"); ok {
+		t.Error("display name should be removed")
+	}
+	if _, ok := s.GetGroupChatID("100", "42"); ok {
+		t.Error("group chat ID should be removed")
+	}
+	if _, ok := s.GetProject("42"); ok {
+		t.Error("project binding should be removed")
+	}
+}
+
+func TestTopicClose_UnboundIsNoop(t *testing.T) {
+	s := state.NewState()
+
+	// No bindings — AllUserIDs should return empty
+	ids := s.AllUserIDs()
+	if len(ids) != 0 {
+		t.Errorf("expected no user IDs, got %d", len(ids))
+	}
+}
+
+func TestAllUserIDs(t *testing.T) {
+	s := state.NewState()
+	s.BindThread("100", "1", "@1")
+	s.BindThread("200", "2", "@2")
+
+	ids := s.AllUserIDs()
+	if len(ids) != 2 {
+		t.Fatalf("expected 2 user IDs, got %d", len(ids))
+	}
+
+	found := make(map[string]bool)
+	for _, id := range ids {
+		found[id] = true
+	}
+	if !found["100"] || !found["200"] {
+		t.Errorf("expected user IDs 100 and 200, got %v", ids)
+	}
+}

@@ -236,6 +236,17 @@ func (s *State) GetUserWindowOffset(userID, windowID string) int64 {
 	return 0
 }
 
+// AllUserIDs returns all user IDs that have thread bindings.
+func (s *State) AllUserIDs() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ids := make([]string, 0, len(s.ThreadBindings))
+	for uid := range s.ThreadBindings {
+		ids = append(ids, uid)
+	}
+	return ids
+}
+
 // AllBoundWindowIDs returns all window IDs that are currently bound to any thread.
 func (s *State) AllBoundWindowIDs() map[string]bool {
 	s.mu.RLock()
