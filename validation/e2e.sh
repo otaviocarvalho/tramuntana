@@ -157,7 +157,7 @@ run_minuano migrate 2>&1 | tail -1
 psql "$DB_URL" -c "
   DELETE FROM task_context WHERE task_id IN (SELECT id FROM tasks WHERE project_id='$E2E_PROJECT');
   DELETE FROM task_deps WHERE task_id IN (SELECT id FROM tasks WHERE project_id='$E2E_PROJECT')
-    OR dep_id IN (SELECT id FROM tasks WHERE project_id='$E2E_PROJECT');
+    OR depends_on IN (SELECT id FROM tasks WHERE project_id='$E2E_PROJECT');
   DELETE FROM tasks WHERE project_id='$E2E_PROJECT';
 " >/dev/null 2>&1
 echo -e "  ${GREEN}OK${NC}: cleaned previous e2e data"
@@ -410,7 +410,7 @@ echo "Cleaning up e2e test data..."
 psql "$DB_URL" -c "
   DELETE FROM task_context WHERE task_id IN (SELECT id FROM tasks WHERE project_id='$E2E_PROJECT');
   DELETE FROM task_deps WHERE task_id IN (SELECT id FROM tasks WHERE project_id='$E2E_PROJECT')
-    OR dep_id IN (SELECT id FROM tasks WHERE project_id='$E2E_PROJECT');
+    OR depends_on IN (SELECT id FROM tasks WHERE project_id='$E2E_PROJECT');
   DELETE FROM tasks WHERE project_id='$E2E_PROJECT';
 " >/dev/null 2>&1
 pass "e2e test data cleaned up"
