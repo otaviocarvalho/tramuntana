@@ -3,10 +3,16 @@
 # Tramuntana ↔ Minuano — E2E Integration Tests (I-09, I-10, I-11)
 #
 # Tests the full Telegram → Tramuntana → Minuano → Claude → tmux pipeline.
-# Requires both repos, a running PostgreSQL, tmux, and an active Telegram bot.
 #
-# The script automates setup and verification. Telegram commands must be sent
-# manually in the pauses between steps.
+# Before running:
+#   1. Set TELEGRAM_BOT_TOKEN and ALLOWED_USERS in your shell or in .env
+#   2. Start tramuntana:  tramuntana serve
+#   3. Start PostgreSQL:  minuano up   (the script does this, but it must be installed)
+#   4. Ensure tmux is installed
+#
+# The script builds both binaries, sets up the DB, and creates test tasks.
+# Telegram commands (/pick, /auto, /batch) must be sent manually in the
+# pauses between steps.
 #
 # Usage:
 #   ./validation/e2e.sh [--minuano-dir DIR] [--db URL] [--project NAME]
@@ -73,6 +79,35 @@ wait_for_user() {
 run_minuano() {
   "$MINUANO_BIN" --db "$DB_URL" "$@"
 }
+
+# --- Environment ---
+
+section "Environment"
+
+# Source .env if present and TELEGRAM_BOT_TOKEN is not already set.
+if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] && [ -f "$PROJECT_ROOT/.env" ]; then
+  set -a
+  source "$PROJECT_ROOT/.env"
+  set +a
+  echo -e "  ${GREEN}OK${NC}: loaded .env from $PROJECT_ROOT/.env"
+fi
+
+# Validate required env vars before doing anything else.
+MISSING=()
+[ -z "${TELEGRAM_BOT_TOKEN:-}" ] && MISSING+=("TELEGRAM_BOT_TOKEN")
+[ -z "${ALLOWED_USERS:-}" ] && MISSING+=("ALLOWED_USERS")
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+  echo -e "  ${RED}FATAL${NC}: missing required environment variables: ${MISSING[*]}"
+  echo ""
+  echo "  Set them in your shell or in $PROJECT_ROOT/.env:"
+  echo "    TELEGRAM_BOT_TOKEN=<your-bot-token-from-botfather>"
+  echo "    ALLOWED_USERS=<your-telegram-user-id>"
+  exit 1
+fi
+
+echo -e "  ${GREEN}OK${NC}: TELEGRAM_BOT_TOKEN is set"
+echo -e "  ${GREEN}OK${NC}: ALLOWED_USERS is set"
 
 # --- Prerequisites ---
 
