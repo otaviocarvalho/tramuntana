@@ -19,6 +19,9 @@ type statusKey struct {
 	ThreadID int
 }
 
+// animFrames are the cycling emoji markers prepended to status messages.
+var animFrames = []string{"☕", "⏳", "✨", "🔮"}
+
 // StatusPoller polls Claude's terminal for status line changes and sends updates.
 type StatusPoller struct {
 	bot          *Bot
@@ -27,6 +30,7 @@ type StatusPoller struct {
 	mu           sync.RWMutex
 	lastStatus   map[statusKey]string // last status text per user+thread
 	missCount    map[string]int       // windowID → consecutive miss count
+	animFrame    map[statusKey]int    // animation frame per user+thread
 	pollInterval time.Duration
 }
 
@@ -42,6 +46,7 @@ func NewStatusPoller(bot *Bot, q *queue.Queue, mon *monitor.Monitor) *StatusPoll
 		monitor:      mon,
 		lastStatus:   make(map[statusKey]string),
 		missCount:    make(map[string]int),
+		animFrame:    make(map[statusKey]int),
 		pollInterval: 1 * time.Second,
 	}
 }
@@ -176,14 +181,17 @@ func (sp *StatusPoller) poll() {
 
 				sp.mu.Lock()
 				sp.lastStatus[key] = statusText
+				frame := sp.animFrame[key]
+				sp.animFrame[key] = (frame + 1) % len(animFrames)
 				sp.mu.Unlock()
 
+				displayText := animFrames[frame] + " " + statusText
 				if sp.queue != nil {
 					sp.queue.Enqueue(queue.MessageTask{
 						UserID:      userID,
 						ThreadID:    threadID,
 						ChatID:      chatID,
-						Parts:       []string{statusText},
+						Parts:       []string{displayText},
 						ContentType: "status_update",
 						WindowID:    windowID,
 					})
@@ -192,6 +200,7 @@ func (sp *StatusPoller) poll() {
 				// Status cleared — only after consecutive misses to avoid flicker
 				sp.mu.Lock()
 				delete(sp.lastStatus, key)
+				delete(sp.animFrame, key)
 				sp.mu.Unlock()
 
 				// Check for turn timing
