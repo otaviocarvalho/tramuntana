@@ -111,22 +111,36 @@ func (sp *StatusPoller) poll() {
 			continue
 		}
 
-		// Extract status line
-		statusText, hasStatus := monitor.ExtractStatusLine(paneText)
+		// Check interactive UI once per pane
+		isInteractive := monitor.IsInteractiveUI(paneText)
 
-		// Filter out bare prompt hints (not real status)
-		if hasStatus && isPromptHint(statusText) {
-			hasStatus = false
-		}
+		// Extract status line (only if not interactive)
+		var statusText string
+		var hasStatus bool
+		if !isInteractive {
+			statusText, hasStatus = monitor.ExtractStatusLine(paneText)
 
-		if hasStatus {
-			sp.mu.Lock()
-			sp.missCount[windowID] = 0
-			sp.mu.Unlock()
-		} else {
-			sp.mu.Lock()
-			sp.missCount[windowID]++
-			sp.mu.Unlock()
+			if hasStatus {
+				sp.mu.Lock()
+				sp.missCount[windowID] = 0
+				sp.mu.Unlock()
+			} else {
+				sp.mu.Lock()
+				sp.missCount[windowID]++
+				misses := sp.missCount[windowID]
+				sp.mu.Unlock()
+
+				// DEBUG: log pane tail when we have an active status but detection fails
+				if misses == 1 {
+					paneLines := strings.Split(paneText, "\n")
+					start := len(paneLines) - 8
+					if start < 0 {
+						start = 0
+					}
+					tail := strings.Join(paneLines[start:], " | ")
+					log.Printf("Status poller DEBUG: window %s miss, pane tail: %s", windowID, tail)
+				}
+			}
 		}
 
 		// Update for each observing user
@@ -138,6 +152,28 @@ func (sp *StatusPoller) poll() {
 				continue
 			}
 
+			// Interactive UI detection per user
+			interactiveWin, inMode := getInteractiveWindow(userID, threadID)
+			shouldCheckNew := true
+
+			if inMode && interactiveWin == windowID {
+				if isInteractive {
+					continue // UI still showing, skip
+				}
+				// UI gone — clear, don't re-check this cycle
+				clearInteractiveUI(userID, threadID)
+				shouldCheckNew = false
+			} else if inMode {
+				// Interactive mode for a different window — stale, clear it
+				clearInteractiveUI(userID, threadID)
+			}
+
+			if shouldCheckNew && isInteractive {
+				sp.bot.handleInteractiveUI(chatID, threadID, userID, windowID)
+				continue
+			}
+
+			// Status line handling
 			key := statusKey{userID, threadID}
 
 			sp.mu.RLock()
@@ -203,15 +239,6 @@ func (sp *StatusPoller) poll() {
 			}
 		}
 	}
-}
-
-// isPromptHint returns true if the status text is just a prompt hint, not a real status.
-// e.g. "esc to interrupt", "Enter to select", etc.
-func isPromptHint(text string) bool {
-	lower := strings.ToLower(text)
-	return lower == "esc to interrupt" ||
-		strings.HasPrefix(lower, "enter to") ||
-		strings.HasPrefix(lower, "ctrl-")
 }
 
 // formatDuration formats a duration as "Brewed for Xm Ys" or "Brewed for Ys".

@@ -89,27 +89,8 @@ func TestExtractStatusLine_NoSpinner(t *testing.T) {
 	}
 }
 
-func TestExtractStatusLine_BelowSeparator(t *testing.T) {
-	// In newer Claude Code versions, spinner can be below the separator
-	lines := []string{
-		"Some content",
-		strings.Repeat("─", 40),
-		"· Frolicking… (41s · ↓ 1.6k tokens)",
-		"> prompt",
-	}
-	paneText := strings.Join(lines, "\n")
-
-	status, ok := ExtractStatusLine(paneText)
-	if !ok {
-		t.Fatal("should find status below separator")
-	}
-	if status != "Frolicking… (41s · ↓ 1.6k tokens)" {
-		t.Errorf("status = %q, want 'Frolicking… (41s · ↓ 1.6k tokens)'", status)
-	}
-}
-
 func TestExtractStatusLine_NoSeparator(t *testing.T) {
-	// Without separator, still scan bottom lines for spinner
+	// Without separator, should NOT find status (need separator to anchor search)
 	lines := []string{
 		"Some content",
 		"no separator here",
@@ -118,12 +99,71 @@ func TestExtractStatusLine_NoSeparator(t *testing.T) {
 	}
 	paneText := strings.Join(lines, "\n")
 
+	_, ok := ExtractStatusLine(paneText)
+	if ok {
+		t.Error("should not find status without separator")
+	}
+}
+
+func TestExtractStatusLine_TwoSeparators(t *testing.T) {
+	// Real Claude Code layout has two separators — we must find the topmost one
+	lines := []string{
+		"Some output content",
+		"More output",
+		"✻ Reading file.go",
+		strings.Repeat("─", 40), // separator 1 (topmost — what we want)
+		"❯ _",
+		strings.Repeat("─", 40), // separator 2 (bottommost)
+		"  [Opus 4.6] Context: 34%",
+	}
+	paneText := strings.Join(lines, "\n")
+
 	status, ok := ExtractStatusLine(paneText)
 	if !ok {
-		t.Fatal("should find status even without separator")
+		t.Fatal("should find status above topmost separator")
 	}
-	if status != "Working on something..." {
-		t.Errorf("status = %q, want 'Working on something...'", status)
+	if status != "Reading file.go" {
+		t.Errorf("status = %q, want 'Reading file.go'", status)
+	}
+}
+
+func TestExtractStatusLine_TwoSeparators_NoStatus(t *testing.T) {
+	// Two separators but no spinner above the first one
+	lines := []string{
+		"Some output content",
+		"More output",
+		"Just plain text",
+		strings.Repeat("─", 40),
+		"❯ _",
+		strings.Repeat("─", 40),
+		"  [Opus 4.6] Context: 34%",
+	}
+	paneText := strings.Join(lines, "\n")
+
+	_, ok := ExtractStatusLine(paneText)
+	if ok {
+		t.Error("should not find status when no spinner above separator")
+	}
+}
+
+func TestExtractStatusLine_SkipsBlanksAboveSeparator(t *testing.T) {
+	// Blank lines between status and separator should be skipped
+	lines := []string{
+		"Some output",
+		"✻ Compacting conversation",
+		"",
+		"",
+		strings.Repeat("─", 40),
+		"❯ _",
+	}
+	paneText := strings.Join(lines, "\n")
+
+	status, ok := ExtractStatusLine(paneText)
+	if !ok {
+		t.Fatal("should find status despite blank lines")
+	}
+	if status != "Compacting conversation" {
+		t.Errorf("status = %q, want 'Compacting conversation'", status)
 	}
 }
 
@@ -139,6 +179,7 @@ func TestIsChromeSeparator(t *testing.T) {
 		{"", false},
 		{strings.Repeat("━", 25), true},
 		{"  " + strings.Repeat("─", 25) + "  ", true},
+		{strings.Repeat("─", 15) + " text " + strings.Repeat("─", 15), false}, // mixed content rejected
 	}
 	for _, tt := range tests {
 		t.Run(tt.line[:min(len(tt.line), 20)], func(t *testing.T) {
@@ -147,18 +188,6 @@ func TestIsChromeSeparator(t *testing.T) {
 				t.Errorf("isChromeSeparator(%q) = %v, want %v", tt.line[:min(len(tt.line), 20)], got, tt.want)
 			}
 		})
-	}
-}
-
-func TestHasSpinnerChar(t *testing.T) {
-	if !hasSpinnerChar("✻ Working") {
-		t.Error("should detect ✻")
-	}
-	if !hasSpinnerChar("· Loading") {
-		t.Error("should detect ·")
-	}
-	if hasSpinnerChar("No spinner here") {
-		t.Error("should not detect spinner in plain text")
 	}
 }
 

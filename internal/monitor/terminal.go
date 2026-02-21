@@ -21,64 +21,45 @@ func StripPaneChrome(paneText string) string {
 
 // ExtractStatusLine detects Claude's spinner/status from the terminal output.
 // Returns the status text and whether a status was found.
-// Searches both above and below the chrome separator, since Claude Code versions
-// vary in where the spinner status line appears relative to the separator.
+// Matches CCBot logic: find topmost separator, then search above it for a line
+// whose first character is a spinner. Stops at the first non-empty non-spinner line.
 func ExtractStatusLine(paneText string) (string, bool) {
 	lines := strings.Split(paneText, "\n")
 	sepIdx := findChromeSeparator(lines)
 	if sepIdx < 0 {
-		// No separator found — scan all lines from bottom for spinner
-		for i := len(lines) - 1; i >= 0 && i >= len(lines)-10; i-- {
-			line := strings.TrimSpace(lines[i])
-			if hasSpinnerChar(line) {
-				if statusText := extractAfterSpinner(line); statusText != "" {
-					return statusText, true
-				}
-			}
-		}
 		return "", false
 	}
 
-	// Search above the separator (up to 3 lines)
-	searchStart := sepIdx - 3
-	if searchStart < 0 {
-		searchStart = 0
+	// Check lines above separator (skip blanks, up to 5 lines above)
+	minIdx := sepIdx - 5
+	if minIdx < 0 {
+		minIdx = -1
 	}
-	for i := sepIdx - 1; i >= searchStart; i-- {
+	for i := sepIdx - 1; i > minIdx; i-- {
 		line := strings.TrimSpace(lines[i])
-		if hasSpinnerChar(line) {
-			if statusText := extractAfterSpinner(line); statusText != "" {
-				return statusText, true
-			}
+		if line == "" {
+			continue
 		}
-	}
-
-	// Search below the separator (up to 3 lines)
-	searchEnd := sepIdx + 4
-	if searchEnd > len(lines) {
-		searchEnd = len(lines)
-	}
-	for i := sepIdx + 1; i < searchEnd; i++ {
-		line := strings.TrimSpace(lines[i])
-		if hasSpinnerChar(line) {
-			if statusText := extractAfterSpinner(line); statusText != "" {
-				return statusText, true
-			}
+		r, size := utf8.DecodeRuneInString(line)
+		if strings.ContainsRune(spinnerChars, r) {
+			return strings.TrimSpace(line[size:]), true
 		}
+		// First non-empty non-spinner line → no status
+		return "", false
 	}
-
 	return "", false
 }
 
-// findChromeSeparator finds the line index of the chrome separator
-// (a line of ─ chars, ≥20 wide) in the last 10 lines.
+// findChromeSeparator finds the line index of the topmost chrome separator
+// (a line of ─ chars) in the last 10 lines. Searches top-down to find the
+// first separator, which sits just below the status line in Claude Code's layout.
 func findChromeSeparator(lines []string) int {
 	start := len(lines) - 10
 	if start < 0 {
 		start = 0
 	}
 
-	for i := len(lines) - 1; i >= start; i-- {
+	for i := start; i < len(lines); i++ {
 		if isChromeSeparator(lines[i]) {
 			return i
 		}
@@ -86,31 +67,19 @@ func findChromeSeparator(lines []string) int {
 	return -1
 }
 
-// isChromeSeparator checks if a line is a chrome separator (≥20 ─ chars).
+// isChromeSeparator checks if a line is a chrome separator.
+// All characters must be ─ or ━, with at least 20 runes (matches CCBot's strict check).
 func isChromeSeparator(line string) bool {
 	trimmed := strings.TrimSpace(line)
-	if len(trimmed) == 0 {
+	if utf8.RuneCountInString(trimmed) < 20 {
 		return false
 	}
-
-	dashCount := 0
 	for _, r := range trimmed {
-		if r == '─' || r == '━' {
-			dashCount++
+		if r != '─' && r != '━' {
+			return false
 		}
 	}
-
-	return dashCount >= 20
-}
-
-// hasSpinnerChar checks if a line contains a spinner character.
-func hasSpinnerChar(line string) bool {
-	for _, r := range line {
-		if strings.ContainsRune(spinnerChars, r) {
-			return true
-		}
-	}
-	return false
+	return true
 }
 
 // extractAfterSpinner extracts the text after the first spinner character.

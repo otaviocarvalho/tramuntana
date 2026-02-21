@@ -74,6 +74,15 @@ func (b *Bot) handleInteractiveUI(chatID int64, threadID int, userID int64, wind
 	}
 }
 
+// getInteractiveWindow returns the window ID if the user is in interactive mode.
+func getInteractiveWindow(userID int64, threadID int) (string, bool) {
+	key := interactiveKey{userID, threadID}
+	interactive.mu.RLock()
+	defer interactive.mu.RUnlock()
+	wid, ok := interactive.modes[key]
+	return wid, ok
+}
+
 // clearInteractiveUI removes the tracked interactive message.
 func clearInteractiveUI(userID int64, threadID int) {
 	key := interactiveKey{userID, threadID}
