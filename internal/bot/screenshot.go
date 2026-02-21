@@ -166,14 +166,15 @@ func (b *Bot) refreshScreenshot(cq *tgbotapi.CallbackQuery, windowID string) {
 // sendDocumentInThread sends a document (file bytes) in a forum thread with an inline keyboard.
 // Uses raw UploadFiles API because go-telegram-bot-api v5 doesn't support message_thread_id.
 func (b *Bot) sendDocumentInThread(chatID int64, threadID int, data []byte, filename string, keyboard tgbotapi.InlineKeyboardMarkup) (tgbotapi.Message, error) {
-	kbJSON, _ := json.Marshal(keyboard)
-
 	params := tgbotapi.Params{}
 	params.AddNonZero64("chat_id", chatID)
 	if threadID != 0 {
 		params.AddNonZero("message_thread_id", threadID)
 	}
-	params["reply_markup"] = string(kbJSON)
+	if len(keyboard.InlineKeyboard) > 0 {
+		kbJSON, _ := json.Marshal(keyboard)
+		params["reply_markup"] = string(kbJSON)
+	}
 
 	file := tgbotapi.FileBytes{Name: filename, Bytes: data}
 
