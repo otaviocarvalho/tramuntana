@@ -328,10 +328,7 @@ func ParseEntries(entries []*Entry, pending map[string]PendingTool) []ParsedEntr
 					pe.Text = block.Content
 					delete(pending, block.ToolUseID)
 				} else {
-					// No matching tool_use (e.g. after restart) — skip unless error
-					if !block.IsError {
-						continue
-					}
+					// No matching tool_use (e.g. after restart) — send with generic label
 					pe.ToolName = "unknown"
 					pe.Text = block.Content
 				}
