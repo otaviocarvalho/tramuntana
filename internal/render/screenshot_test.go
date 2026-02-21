@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"image/color"
 	"image/png"
+	"strings"
 	"testing"
 )
 
@@ -194,5 +195,102 @@ func TestApplySGR_BrightColors(t *testing.T) {
 	_, bg, _ := applySGR("102", defaultFG, defaultBG, false)
 	if bg != ansi16Colors[10] {
 		t.Errorf("bright green BG = %v, want %v", bg, ansi16Colors[10])
+	}
+}
+
+func TestNewFaces(t *testing.T) {
+	faces, err := newFaces(28)
+	if err != nil {
+		t.Fatalf("newFaces failed: %v", err)
+	}
+	for i, face := range faces {
+		if face == nil {
+			t.Errorf("face[%d] is nil", i)
+		}
+	}
+}
+
+func TestFontTier(t *testing.T) {
+	tests := []struct {
+		ch   rune
+		want int
+	}{
+		{'A', 0},         // ASCII → JetBrains
+		{'z', 0},         // ASCII → JetBrains
+		{'0', 0},         // digit → JetBrains
+		{'─', 0},         // box drawing U+2500 → JetBrains (below 0x2E80)
+		{0x23BF, 1},      // ⎿ explicit Noto override
+		{0x4E00, 1},      // 一 CJK ideograph
+		{0x9FFF, 1},      // last CJK unified
+		{0xFF01, 1},      // ！ fullwidth exclamation
+		{0x2E80, 1},      // ⺀ CJK radical
+		{0x23F5, 2},      // ⏵ explicit Symbola
+		{0x2714, 2},      // ✔ explicit Symbola
+		{0x274C, 2},      // ❌ explicit Symbola
+	}
+	for _, tc := range tests {
+		got := fontTier(tc.ch)
+		if got != tc.want {
+			t.Errorf("fontTier(%q U+%04X) = %d, want %d", tc.ch, tc.ch, got, tc.want)
+		}
+	}
+}
+
+func TestSplitByFontTier(t *testing.T) {
+	// All ASCII
+	segs := splitByFontTier("Hello")
+	if len(segs) != 1 || segs[0].Text != "Hello" || segs[0].Tier != 0 {
+		t.Errorf("all-ASCII: got %+v", segs)
+	}
+
+	// Empty
+	segs = splitByFontTier("")
+	if len(segs) != 1 || segs[0].Text != "" || segs[0].Tier != 0 {
+		t.Errorf("empty: got %+v", segs)
+	}
+
+	// Mixed ASCII + CJK
+	segs = splitByFontTier("Hi一二")
+	if len(segs) != 2 {
+		t.Fatalf("mixed: expected 2 segments, got %d: %+v", len(segs), segs)
+	}
+	if segs[0].Text != "Hi" || segs[0].Tier != 0 {
+		t.Errorf("mixed[0]: got %+v", segs[0])
+	}
+	if segs[1].Text != "一二" || segs[1].Tier != 1 {
+		t.Errorf("mixed[1]: got %+v", segs[1])
+	}
+
+	// Symbola character surrounded by ASCII
+	segs = splitByFontTier("ok✔done")
+	if len(segs) != 3 {
+		t.Fatalf("symbola: expected 3 segments, got %d: %+v", len(segs), segs)
+	}
+	if segs[1].Tier != 2 || segs[1].Text != "✔" {
+		t.Errorf("symbola[1]: got %+v", segs[1])
+	}
+}
+
+func TestRenderScreenshot_ImageSize(t *testing.T) {
+	// 80-column, 2-line text should produce a much larger image than with basicfont
+	line := strings.Repeat("X", 80)
+	paneText := line + "\n" + line
+	data, err := RenderScreenshot(paneText)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bounds := img.Bounds()
+	// With 28px font, 80 chars should be ~1300+ pixels wide
+	if bounds.Dx() < 1000 {
+		t.Errorf("image width %d is too small for 80-column text at 28px font", bounds.Dx())
+	}
+	// 2 lines at 39px line height + padding should be > 100px
+	if bounds.Dy() < 100 {
+		t.Errorf("image height %d is too small", bounds.Dy())
 	}
 }

@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/png"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/math/fixed"
 )
 
@@ -50,8 +50,19 @@ type styledRun struct {
 
 var reANSI = regexp.MustCompile(`\x1b\[([0-9;]*)m`)
 
+const (
+	fontSize   = 28.0
+	lineHeight = 39 // int(fontSize * 1.4), matching CCBot
+	padding    = 16
+)
+
 // RenderScreenshot renders ANSI terminal text to a PNG image.
 func RenderScreenshot(paneText string) ([]byte, error) {
+	faces, err := newFaces(fontSize)
+	if err != nil {
+		return nil, err
+	}
+
 	lines := strings.Split(paneText, "\n")
 
 	// Parse each line into styled runs
@@ -61,26 +72,27 @@ func RenderScreenshot(paneText string) ([]byte, error) {
 		parsedLines = append(parsedLines, runs)
 	}
 
-	// Render to image
-	face := basicfont.Face7x13
-	metrics := face.Metrics()
-	charWidth := fixed.I(7)  // basicfont is 7px wide
-	lineHeight := metrics.Height.Ceil() + 2
-	padding := 16
+	// Measure: find the widest line using the primary font's advance width.
+	// Use JetBrains Mono (monospace) advance for consistent column width.
+	primaryFace := faces[0]
+	metrics := primaryFace.Metrics()
+	ascent := metrics.Ascent.Ceil()
 
-	// Calculate image dimensions
-	maxWidth := 0
+	// Measure char width from the primary face (monospace — all glyphs same width)
+	charWidth := font.MeasureString(primaryFace, "M").Ceil()
+
+	maxCols := 0
 	for _, runs := range parsedLines {
-		lineWidth := 0
+		cols := 0
 		for _, run := range runs {
-			lineWidth += len(run.Text)
+			cols += len([]rune(run.Text))
 		}
-		if lineWidth > maxWidth {
-			maxWidth = lineWidth
+		if cols > maxCols {
+			maxCols = cols
 		}
 	}
 
-	imgWidth := maxWidth*charWidth.Ceil() + padding*2
+	imgWidth := maxCols*charWidth + padding*2
 	imgHeight := len(parsedLines)*lineHeight + padding*2
 
 	if imgWidth < 100 {
@@ -92,42 +104,38 @@ func RenderScreenshot(paneText string) ([]byte, error) {
 
 	img := image.NewRGBA(image.Rect(0, 0, imgWidth, imgHeight))
 
-	// Fill background
-	for y := 0; y < imgHeight; y++ {
-		for x := 0; x < imgWidth; x++ {
-			img.Set(x, y, defaultBG)
-		}
-	}
+	// Fill background using draw.Draw (faster than pixel loop for large images)
+	draw.Draw(img, img.Bounds(), image.NewUniform(defaultBG), image.Point{}, draw.Src)
 
 	// Render text
 	for lineIdx, runs := range parsedLines {
 		x := padding
-		y := padding + (lineIdx+1)*lineHeight - 3 // baseline offset
+		baseY := padding + lineIdx*lineHeight + ascent
 
 		for _, run := range runs {
-			// Draw background for each character
-			for _, ch := range run.Text {
-				if run.BG != defaultBG {
-					for dy := 0; dy < lineHeight; dy++ {
-						for dx := 0; dx < charWidth.Ceil(); dx++ {
-							px := x + dx
-							py := y - lineHeight + 3 + dy
-							if px >= 0 && px < imgWidth && py >= 0 && py < imgHeight {
-								img.Set(px, py, run.BG)
-							}
-						}
-					}
-				}
+			// Split each styled run by font tier for fallback rendering
+			segments := splitByFontTier(run.Text)
 
-				// Draw character
-				d := &font.Drawer{
-					Dst:  img,
-					Src:  image.NewUniform(run.FG),
-					Face: face,
-					Dot:  fixed.P(x, y),
+			for _, seg := range segments {
+				face := faces[seg.Tier]
+
+				for _, ch := range seg.Text {
+					// Draw background rect if non-default
+					if run.BG != defaultBG {
+						bgRect := image.Rect(x, padding+lineIdx*lineHeight, x+charWidth, padding+(lineIdx+1)*lineHeight)
+						draw.Draw(img, bgRect, image.NewUniform(run.BG), image.Point{}, draw.Src)
+					}
+
+					// Draw character
+					d := &font.Drawer{
+						Dst:  img,
+						Src:  image.NewUniform(run.FG),
+						Face: face,
+						Dot:  fixed.P(x, baseY),
+					}
+					d.DrawString(string(ch))
+					x += charWidth
 				}
-				d.DrawString(string(ch))
-				x += charWidth.Ceil()
 			}
 		}
 	}
