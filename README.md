@@ -4,7 +4,7 @@ A wind that clears the horizon and clouds the mind.
 
 Tramuntana bridges Telegram group topics to Claude Code sessions via tmux. Each topic maps to a tmux window running its own Claude Code process, giving you a persistent, observable AI coding interface from Telegram.
 
-Built in Go. Spiritual successor to CCBot.
+Built in Go. Inspired by [CCBot](https://github.com/six-ddc/ccbot). Complements [Minuano](https://github.com/otaviocarvalho/minuano)'s task scheduling functionality by wrapping it in a Telegram interface.
 
 ## How it works
 
@@ -12,7 +12,7 @@ Built in Go. Spiritual successor to CCBot.
 1 Telegram Topic = 1 tmux Window = 1 Claude Code process
 ```
 
-Send a message in a Telegram topic, and Tramuntana routes it to the corresponding Claude Code session. Responses stream back as they appear. Optionally integrates with [Minuano](https://github.com/otaviocc/minuano) for task coordination.
+Send a message in a Telegram topic, and Tramuntana routes it to the corresponding Claude Code session. Responses stream back as they appear. Optionally integrates with [Minuano](https://github.com/otaviocarvalho/minuano) for task coordination.
 
 ## Usage
 
