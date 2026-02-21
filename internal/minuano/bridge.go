@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -143,4 +144,46 @@ func (b *Bridge) PromptAuto(project string) (string, error) {
 // PromptBatch generates a batch prompt for multiple tasks.
 func (b *Bridge) PromptBatch(taskIDs ...string) (string, error) {
 	return b.Prompt("batch", taskIDs...)
+}
+
+// AddResult holds the output of a successful task creation.
+type AddResult struct {
+	ID    string
+	Title string
+}
+
+// Add creates a new task via `minuano add`.
+func (b *Bridge) Add(title, project, body string, priority int) (*AddResult, error) {
+	args := []string{"add", title, "--project", project, "--priority", strconv.Itoa(priority)}
+	if body != "" {
+		args = append(args, "--body", body)
+	}
+
+	out, err := b.run(args...)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseAddOutput(out)
+}
+
+// parseAddOutput extracts the task ID and title from `minuano add` output.
+// Expected format: "Created: <id>  \"<title>\"\n"
+func parseAddOutput(out string) (*AddResult, error) {
+	line := strings.TrimSpace(out)
+	if !strings.HasPrefix(line, "Created: ") {
+		return nil, fmt.Errorf("unexpected add output: %s", line)
+	}
+
+	rest := line[len("Created: "):]
+	// ID and title are separated by double-space
+	idx := strings.Index(rest, "  ")
+	if idx < 0 {
+		return nil, fmt.Errorf("unexpected add output (no double-space separator): %s", line)
+	}
+
+	id := rest[:idx]
+	title := strings.Trim(rest[idx+2:], "\"")
+
+	return &AddResult{ID: id, Title: title}, nil
 }

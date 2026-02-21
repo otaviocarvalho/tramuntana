@@ -18,9 +18,11 @@ func newTestBot(t *testing.T) *Bot {
 			AllowedUsers:    []int64{100},
 			TmuxSessionName: "test-session",
 		},
-		state:        state.NewState(),
-		browseStates: make(map[int64]*BrowseState),
-		windowCache:  make(map[int64][]tmux.Window),
+		state:              state.NewState(),
+		browseStates:       make(map[int64]*BrowseState),
+		windowCache:        make(map[int64][]tmux.Window),
+		windowPickerStates: make(map[int64]*windowPickerState),
+		addTaskStates:      make(map[int64]*addTaskState),
 	}
 }
 
@@ -126,12 +128,14 @@ func TestRouteCallback_Prefixes(t *testing.T) {
 		{"hist_page:0", "hist_"},
 		{"ss_refresh", "ss_"},
 		{"nav_up", "nav_"},
+		{"task_pri:5", "task_"},
+		{"task_cancel", "task_"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.data, func(t *testing.T) {
 			matched := false
-			for _, p := range []string{"dir_", "win_", "hist_", "ss_", "nav_"} {
+			for _, p := range []string{"dir_", "win_", "hist_", "ss_", "nav_", "task_"} {
 				if len(tt.data) >= len(p) && tt.data[:len(p)] == p {
 					if p == tt.prefix {
 						matched = true

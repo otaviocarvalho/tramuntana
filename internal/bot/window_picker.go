@@ -79,17 +79,21 @@ func (b *Bot) processWindowCallback(cq *tgbotapi.CallbackQuery) {
 	userID := cq.From.ID
 	data := cq.Data
 
+	log.Printf("DEBUG: processWindowCallback user=%d data=%q", userID, data)
+
 	b.mu.RLock()
 	wps, ok := b.windowPickerStates[userID]
 	b.mu.RUnlock()
 
 	if !ok {
+		log.Printf("DEBUG: no windowPickerState for user=%d", userID)
 		return
 	}
 
 	// Verify topic match
 	threadID := getThreadID(cq.Message)
 	if threadID != wps.ThreadID {
+		log.Printf("DEBUG: threadID mismatch: callback=%d picker=%d", threadID, wps.ThreadID)
 		return
 	}
 
@@ -144,6 +148,7 @@ func (b *Bot) handleWinBind(cq *tgbotapi.CallbackQuery, wps *windowPickerState, 
 }
 
 func (b *Bot) handleWinNew(cq *tgbotapi.CallbackQuery, wps *windowPickerState, userID int64) {
+	log.Printf("DEBUG: handleWinNew user=%d chatID=%d threadID=%d", userID, wps.ChatID, wps.ThreadID)
 	pendingText := wps.PendingText
 	chatID := wps.ChatID
 	threadID := wps.ThreadID

@@ -27,6 +27,10 @@ type Bot struct {
 	windowCache map[int64][]tmux.Window
 	// Per-user window picker state
 	windowPickerStates map[int64]*windowPickerState
+	// Per-user file browser state for /get command
+	fileBrowseStates map[int64]*FileBrowseState
+	// Per-user add-task wizard state
+	addTaskStates map[int64]*addTaskState
 	// Monitor state (set by serve command when monitor is started)
 	monitorState *state.MonitorState
 	// Minuano CLI bridge
@@ -61,6 +65,8 @@ func New(cfg *config.Config) (*Bot, error) {
 		browseStates:       make(map[int64]*BrowseState),
 		windowCache:        make(map[int64][]tmux.Window),
 		windowPickerStates: make(map[int64]*windowPickerState),
+		fileBrowseStates:   make(map[int64]*FileBrowseState),
+		addTaskStates:      make(map[int64]*addTaskState),
 		minuanoBridge:      minuano.NewBridge(cfg.MinuanoBin, cfg.MinuanoDB),
 	}, nil
 }
@@ -76,6 +82,8 @@ func (b *Bot) registerCommands() {
 		tgbotapi.BotCommand{Command: "pick", Description: "Assign a specific task to Claude"},
 		tgbotapi.BotCommand{Command: "auto", Description: "Auto-claim and work project tasks"},
 		tgbotapi.BotCommand{Command: "batch", Description: "Work a list of tasks in order"},
+		tgbotapi.BotCommand{Command: "add", Description: "Create a new Minuano task"},
+		tgbotapi.BotCommand{Command: "get", Description: "Browse and send a file"},
 		tgbotapi.BotCommand{Command: "clear", Description: "Forward /clear to Claude Code"},
 		tgbotapi.BotCommand{Command: "help", Description: "Forward /help to Claude Code"},
 	)
@@ -124,12 +132,21 @@ func (b *Bot) Run(ctx context.Context) error {
 // handleUpdate routes an update to the appropriate handler.
 func (b *Bot) handleUpdate(update tgbotapi.Update) {
 	if update.Message != nil {
+		log.Printf("DEBUG: received message from user=%d chat=%d text=%q",
+			update.Message.From.ID, update.Message.Chat.ID, update.Message.Text)
 		if !b.isAuthorized(update.Message.From.ID, update.Message.Chat.ID) {
+			log.Printf("DEBUG: unauthorized user=%d chat=%d (ALLOWED_USERS=%v, ALLOWED_GROUPS=%v)",
+				update.Message.From.ID, update.Message.Chat.ID,
+				b.config.AllowedUsers, b.config.AllowedGroups)
 			return
 		}
 		b.handleMessage(update.Message)
 	} else if update.CallbackQuery != nil {
+		log.Printf("DEBUG: callback from user=%d chat=%d data=%q",
+			update.CallbackQuery.From.ID, update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Data)
 		if !b.isAuthorized(update.CallbackQuery.From.ID, update.CallbackQuery.Message.Chat.ID) {
+			log.Printf("DEBUG: unauthorized callback user=%d chat=%d",
+				update.CallbackQuery.From.ID, update.CallbackQuery.Message.Chat.ID)
 			return
 		}
 		b.handleCallback(update.CallbackQuery)

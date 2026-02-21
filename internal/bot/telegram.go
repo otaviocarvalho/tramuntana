@@ -55,6 +55,11 @@ func extractForumFields(data []byte) {
 			topicClosedSet[raw.Message.MessageID] = true
 		}
 	}
+	if raw.CallbackQuery != nil && raw.CallbackQuery.Message != nil {
+		if raw.CallbackQuery.Message.MessageThreadID != 0 {
+			threadIDCache[raw.CallbackQuery.Message.MessageID] = raw.CallbackQuery.Message.MessageThreadID
+		}
+	}
 }
 
 // getThreadID returns the thread ID for a message.

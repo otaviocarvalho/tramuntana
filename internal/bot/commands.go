@@ -2,6 +2,7 @@ package bot
 
 import (
 	"log"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -32,6 +33,10 @@ func (b *Bot) handleCommand(msg *tgbotapi.Message) {
 		b.handleAuto(msg)
 	case "batch":
 		b.handleBatch(msg)
+	case "add":
+		b.handleAdd(msg)
+	case "get":
+		b.handleGet(msg)
 	default:
 		b.reply(msg.Chat.ID, getThreadID(msg), "Unknown command: /"+msg.Command())
 	}
@@ -131,6 +136,35 @@ func (b *Bot) handleAuto(msg *tgbotapi.Message) {
 // handleBatch runs batch Minuano tasks.
 func (b *Bot) handleBatch(msg *tgbotapi.Message) {
 	b.handleBatchCommand(msg)
+}
+
+// handleGet starts the file browser for sending files via Telegram.
+func (b *Bot) handleGet(msg *tgbotapi.Message) {
+	chatID := msg.Chat.ID
+	threadID := getThreadID(msg)
+	userID := msg.From.ID
+
+	// Try to start from the bound session's CWD
+	startPath := ""
+	windowID, bound := b.resolveWindow(msg)
+	if bound {
+		if ws, ok := b.state.GetWindowState(windowID); ok && ws.CWD != "" {
+			startPath = ws.CWD
+		}
+	}
+
+	// Fall back to home directory
+	if startPath == "" {
+		home, _ := os.UserHomeDir()
+		startPath = home
+	}
+
+	b.showFileBrowser(chatID, threadID, userID, startPath)
+}
+
+// handleAdd starts the add-task wizard.
+func (b *Bot) handleAdd(msg *tgbotapi.Message) {
+	b.handleAddCommand(msg)
 }
 
 // handleTopicClose handles forum topic close events.

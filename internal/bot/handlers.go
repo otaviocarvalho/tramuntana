@@ -16,6 +16,11 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 	threadID := strconv.Itoa(getThreadID(msg))
 	chatID := msg.Chat.ID
 
+	// Check if this is a reply to an add-task wizard message
+	if b.handleAddTaskReply(msg) {
+		return
+	}
+
 	// Cancel any running bash capture for this topic
 	cancelBashCapture(msg.From.ID, getThreadID(msg))
 
@@ -122,6 +127,10 @@ func (b *Bot) routeCallback(cq *tgbotapi.CallbackQuery) {
 		b.handleScreenshotCallback(cq)
 	case strings.HasPrefix(data, "nav_"):
 		b.handleInteractiveCallback(cq)
+	case strings.HasPrefix(data, "get_"):
+		b.processFileBrowserCallback(cq)
+	case strings.HasPrefix(data, "task_"):
+		b.processAddTaskCallback(cq)
 	case data == "noop":
 		// No-op button (e.g., page counter), already answered above
 	default:
