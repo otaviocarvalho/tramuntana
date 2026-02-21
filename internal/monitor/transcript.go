@@ -324,6 +324,7 @@ func ParseEntries(entries []*Entry, pending map[string]PendingTool) []ParsedEntr
 
 				if pt, ok := pending[block.ToolUseID]; ok {
 					pe.ToolName = pt.ToolName
+					pe.ToolInput = pt.Input
 					pe.Text = block.Content
 					delete(pending, block.ToolUseID)
 				} else {
@@ -356,6 +357,7 @@ type ParsedEntry struct {
 	Text        string
 	ToolUseID   string
 	ToolName    string
+	ToolInput   string // tool input summary (for tool_result combined display)
 	IsError     bool
 }
 

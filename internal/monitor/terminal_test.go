@@ -89,11 +89,41 @@ func TestExtractStatusLine_NoSpinner(t *testing.T) {
 	}
 }
 
+func TestExtractStatusLine_BelowSeparator(t *testing.T) {
+	// In newer Claude Code versions, spinner can be below the separator
+	lines := []string{
+		"Some content",
+		strings.Repeat("─", 40),
+		"· Frolicking… (41s · ↓ 1.6k tokens)",
+		"> prompt",
+	}
+	paneText := strings.Join(lines, "\n")
+
+	status, ok := ExtractStatusLine(paneText)
+	if !ok {
+		t.Fatal("should find status below separator")
+	}
+	if status != "Frolicking… (41s · ↓ 1.6k tokens)" {
+		t.Errorf("status = %q, want 'Frolicking… (41s · ↓ 1.6k tokens)'", status)
+	}
+}
+
 func TestExtractStatusLine_NoSeparator(t *testing.T) {
-	paneText := "✻ Working...\nno separator"
-	_, ok := ExtractStatusLine(paneText)
-	if ok {
-		t.Error("should not find status without separator")
+	// Without separator, still scan bottom lines for spinner
+	lines := []string{
+		"Some content",
+		"no separator here",
+		"· Working on something...",
+		"> prompt",
+	}
+	paneText := strings.Join(lines, "\n")
+
+	status, ok := ExtractStatusLine(paneText)
+	if !ok {
+		t.Fatal("should find status even without separator")
+	}
+	if status != "Working on something..." {
+		t.Errorf("status = %q, want 'Working on something...'", status)
 	}
 }
 

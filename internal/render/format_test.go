@@ -11,9 +11,9 @@ func TestFormatToolUse(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"Read", "main.go", "**Read**(main.go)"},
-		{"Bash", "git status", "**Bash**(git status)"},
-		{"Task", "", "**Task**()"},
+		{"Read", "main.go", "● **Read**(main.go)"},
+		{"Bash", "git status", "● **Bash**(git status)"},
+		{"Task", "", "● **Task**()"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -27,90 +27,123 @@ func TestFormatToolUse(t *testing.T) {
 
 func TestFormatToolResult_Read(t *testing.T) {
 	content := "line1\nline2\nline3\n"
-	got := FormatToolResult("Read", content, false)
-	if got != "Read 3 lines" {
-		t.Errorf("got %q, want 'Read 3 lines'", got)
+	got := FormatToolResult("Read", "main.go", content, false)
+	if !strings.Contains(got, "● **Read**(main.go)") {
+		t.Errorf("missing header in %q", got)
+	}
+	if !strings.Contains(got, "⎿ Read 3 lines") {
+		t.Errorf("missing result in %q", got)
 	}
 }
 
 func TestFormatToolResult_Write(t *testing.T) {
 	content := "a\nb\n"
-	got := FormatToolResult("Write", content, false)
-	if got != "Wrote 2 lines" {
+	got := FormatToolResult("Write", "file.go", content, false)
+	if !strings.Contains(got, "⎿ Wrote 2 lines") {
 		t.Errorf("got %q, want 'Wrote 2 lines'", got)
 	}
 }
 
 func TestFormatToolResult_Bash(t *testing.T) {
 	content := "file1\nfile2\nfile3"
-	got := FormatToolResult("Bash", content, false)
-	if !strings.HasPrefix(got, "Output 3 lines") {
-		t.Errorf("got %q, should start with 'Output 3 lines'", got)
+	got := FormatToolResult("Bash", "ls", content, false)
+	if !strings.Contains(got, "● **Bash**(ls)") {
+		t.Errorf("missing header in %q", got)
 	}
-	if !strings.Contains(got, ExpQuoteStart) {
-		t.Error("should contain expandable quote")
+	if !strings.Contains(got, "⎿ file1") {
+		t.Errorf("missing preview in %q", got)
+	}
+}
+
+func TestFormatToolResult_BashLong(t *testing.T) {
+	lines := make([]string, 10)
+	for i := range lines {
+		lines[i] = "output line"
+	}
+	content := strings.Join(lines, "\n")
+	got := FormatToolResult("Bash", "make", content, false)
+	if !strings.Contains(got, "… +7 lines") {
+		t.Errorf("should show truncation, got %q", got)
+	}
+}
+
+func TestFormatToolResult_BashEmpty(t *testing.T) {
+	got := FormatToolResult("Bash", "go build", "", false)
+	if !strings.Contains(got, "⎿ (No output)") {
+		t.Errorf("got %q, want '(No output)'", got)
 	}
 }
 
 func TestFormatToolResult_Grep(t *testing.T) {
 	content := "src/main.go:10: TODO fix this\nsrc/lib.go:20: TODO refactor\n"
-	got := FormatToolResult("Grep", content, false)
-	if !strings.HasPrefix(got, "Found 2 matches") {
-		t.Errorf("got %q, should start with 'Found 2 matches'", got)
+	got := FormatToolResult("Grep", "TODO", content, false)
+	if !strings.Contains(got, "Found 2 matches") {
+		t.Errorf("got %q, should contain 'Found 2 matches'", got)
 	}
 }
 
 func TestFormatToolResult_Glob(t *testing.T) {
 	content := "main.go\nutil.go\n"
-	got := FormatToolResult("Glob", content, false)
-	if !strings.HasPrefix(got, "Found 2 files") {
-		t.Errorf("got %q, should start with 'Found 2 files'", got)
+	got := FormatToolResult("Glob", "*.go", content, false)
+	if !strings.Contains(got, "Found 2 files") {
+		t.Errorf("got %q, should contain 'Found 2 files'", got)
 	}
 }
 
 func TestFormatToolResult_Edit(t *testing.T) {
 	content := "--- a/file.go\n+++ b/file.go\n-old line\n+new line\n+another new line"
-	got := FormatToolResult("Edit", content, false)
-	if !strings.HasPrefix(got, "Added 2, removed 1") {
-		t.Errorf("got %q, should start with 'Added 2, removed 1'", got)
+	got := FormatToolResult("Edit", "file.go", content, false)
+	if !strings.Contains(got, "Added 2, removed 1") {
+		t.Errorf("got %q, should contain 'Added 2, removed 1'", got)
+	}
+}
+
+func TestFormatToolResult_EditSuccess(t *testing.T) {
+	content := "The file /path/to/file.go has been updated successfully."
+	got := FormatToolResult("Edit", "file.go", content, false)
+	if !strings.Contains(got, "The file /path/to/file.go has been updated successfully.") {
+		t.Errorf("got %q, should show success message", got)
+	}
+	if strings.Contains(got, "Added 0") {
+		t.Errorf("should not show 'Added 0'")
 	}
 }
 
 func TestFormatToolResult_Task(t *testing.T) {
 	content := "Searching...\nFound 3 results\nDone."
-	got := FormatToolResult("Task", content, false)
-	if !strings.HasPrefix(got, "Agent output 3 lines") {
-		t.Errorf("got %q, should start with 'Agent output 3 lines'", got)
+	got := FormatToolResult("Task", "explore", content, false)
+	if !strings.Contains(got, "Agent output 3 lines") {
+		t.Errorf("got %q, should contain 'Agent output 3 lines'", got)
 	}
 }
 
 func TestFormatToolResult_WebFetch(t *testing.T) {
 	content := "some html content here"
-	got := FormatToolResult("WebFetch", content, false)
-	if !strings.HasPrefix(got, "Fetched 22 characters") {
-		t.Errorf("got %q, should start with 'Fetched 22 characters'", got)
+	got := FormatToolResult("WebFetch", "https://example.com", content, false)
+	if !strings.Contains(got, "Fetched 22 characters") {
+		t.Errorf("got %q, should contain 'Fetched 22 characters'", got)
 	}
 }
 
 func TestFormatToolResult_WebSearch(t *testing.T) {
 	content := "1. First result\n2. Second result\n"
-	got := FormatToolResult("WebSearch", content, false)
-	if !strings.HasPrefix(got, "2 search results") {
-		t.Errorf("got %q, should start with '2 search results'", got)
+	got := FormatToolResult("WebSearch", "test query", content, false)
+	if !strings.Contains(got, "2 search results") {
+		t.Errorf("got %q, should contain '2 search results'", got)
 	}
 }
 
 func TestFormatToolResult_Error(t *testing.T) {
 	content := "command not found: xyz"
-	got := FormatToolResult("Bash", content, true)
-	if !strings.HasPrefix(got, "Error: command not found: xyz") {
-		t.Errorf("got %q, should start with error", got)
+	got := FormatToolResult("Bash", "xyz", content, true)
+	if !strings.Contains(got, "Error: command not found: xyz") {
+		t.Errorf("got %q, should contain error", got)
 	}
 }
 
 func TestFormatToolResult_ErrorMultiline(t *testing.T) {
 	content := "error line 1\nerror line 2\nerror line 3"
-	got := FormatToolResult("Bash", content, true)
+	got := FormatToolResult("Bash", "cmd", content, true)
 	if !strings.Contains(got, ExpQuoteStart) {
 		t.Error("multiline error should have expandable quote")
 	}
@@ -171,8 +204,22 @@ func TestCountEditChanges(t *testing.T) {
 }
 
 func TestFormatToolResult_EmptyContent(t *testing.T) {
-	got := FormatToolResult("Read", "", false)
-	if got != "Read 0 lines" {
-		t.Errorf("got %q, want 'Read 0 lines'", got)
+	got := FormatToolResult("Read", "file.go", "", false)
+	if !strings.Contains(got, "⎿ (No output)") {
+		t.Errorf("got %q, want '(No output)'", got)
+	}
+}
+
+func TestFormatPreview(t *testing.T) {
+	lines := []string{"line1", "line2", "line3", "line4", "line5"}
+	got := formatPreview(lines, 5)
+	if !strings.Contains(got, "line1") {
+		t.Error("should include first line")
+	}
+	if !strings.Contains(got, "… +2 lines") {
+		t.Errorf("should show truncation, got %q", got)
+	}
+	if strings.Contains(got, "line4") {
+		t.Error("should not include line4")
 	}
 }

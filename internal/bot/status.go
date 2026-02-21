@@ -2,12 +2,12 @@ package bot
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
-
-	"fmt"
 
 	"github.com/otaviocarvalho/tramuntana/internal/monitor"
 	"github.com/otaviocarvalho/tramuntana/internal/queue"
@@ -27,8 +27,13 @@ type StatusPoller struct {
 	monitor      *monitor.Monitor
 	mu           sync.RWMutex
 	lastStatus   map[statusKey]string // last status text per user+thread
+	missCount    map[string]int       // windowID → consecutive miss count
 	pollInterval time.Duration
 }
+
+// missThreshold is how many consecutive polls must miss the status
+// before we consider it truly cleared (prevents flicker from unreliable detection).
+const missThreshold = 3
 
 // NewStatusPoller creates a new StatusPoller.
 func NewStatusPoller(bot *Bot, q *queue.Queue, mon *monitor.Monitor) *StatusPoller {
@@ -37,6 +42,7 @@ func NewStatusPoller(bot *Bot, q *queue.Queue, mon *monitor.Monitor) *StatusPoll
 		queue:        q,
 		monitor:      mon,
 		lastStatus:   make(map[statusKey]string),
+		missCount:    make(map[string]int),
 		pollInterval: 1 * time.Second,
 	}
 }
@@ -107,8 +113,20 @@ func (sp *StatusPoller) poll() {
 
 		// Extract status line
 		statusText, hasStatus := monitor.ExtractStatusLine(paneText)
+
+		// Filter out bare prompt hints (not real status)
+		if hasStatus && isPromptHint(statusText) {
+			hasStatus = false
+		}
+
 		if hasStatus {
-			log.Printf("Status poller: window %s status=%q", windowID, statusText)
+			sp.mu.Lock()
+			sp.missCount[windowID] = 0
+			sp.mu.Unlock()
+		} else {
+			sp.mu.Lock()
+			sp.missCount[windowID]++
+			sp.mu.Unlock()
 		}
 
 		// Update for each observing user
@@ -124,6 +142,7 @@ func (sp *StatusPoller) poll() {
 
 			sp.mu.RLock()
 			lastText := sp.lastStatus[key]
+			misses := sp.missCount[windowID]
 			sp.mu.RUnlock()
 
 			if hasStatus {
@@ -146,8 +165,8 @@ func (sp *StatusPoller) poll() {
 						WindowID:    windowID,
 					})
 				}
-			} else if lastText != "" {
-				// Status cleared — Claude finished
+			} else if lastText != "" && misses >= missThreshold {
+				// Status cleared — only after consecutive misses to avoid flicker
 				sp.mu.Lock()
 				delete(sp.lastStatus, key)
 				sp.mu.Unlock()
@@ -184,6 +203,15 @@ func (sp *StatusPoller) poll() {
 			}
 		}
 	}
+}
+
+// isPromptHint returns true if the status text is just a prompt hint, not a real status.
+// e.g. "esc to interrupt", "Enter to select", etc.
+func isPromptHint(text string) bool {
+	lower := strings.ToLower(text)
+	return lower == "esc to interrupt" ||
+		strings.HasPrefix(lower, "enter to") ||
+		strings.HasPrefix(lower, "ctrl-")
 }
 
 // formatDuration formats a duration as "Brewed for Xm Ys" or "Brewed for Ys".

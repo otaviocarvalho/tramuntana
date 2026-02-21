@@ -248,7 +248,7 @@ func (m *Monitor) enqueueEntry(userID int64, threadID int, chatID int64, windowI
 		}
 		contentType = "tool_use"
 	case "tool_result":
-		text = render.FormatToolResult(pe.ToolName, pe.Text, pe.IsError)
+		text = render.FormatToolResult(pe.ToolName, pe.ToolInput, pe.Text, pe.IsError)
 		contentType = "tool_result"
 	case "thinking":
 		text = render.FormatThinking(pe.Text)

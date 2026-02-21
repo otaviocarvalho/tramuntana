@@ -21,26 +21,47 @@ func StripPaneChrome(paneText string) string {
 
 // ExtractStatusLine detects Claude's spinner/status from the terminal output.
 // Returns the status text and whether a status was found.
+// Searches both above and below the chrome separator, since Claude Code versions
+// vary in where the spinner status line appears relative to the separator.
 func ExtractStatusLine(paneText string) (string, bool) {
 	lines := strings.Split(paneText, "\n")
 	sepIdx := findChromeSeparator(lines)
 	if sepIdx < 0 {
+		// No separator found — scan all lines from bottom for spinner
+		for i := len(lines) - 1; i >= 0 && i >= len(lines)-10; i-- {
+			line := strings.TrimSpace(lines[i])
+			if hasSpinnerChar(line) {
+				if statusText := extractAfterSpinner(line); statusText != "" {
+					return statusText, true
+				}
+			}
+		}
 		return "", false
 	}
 
-	// Look at lines above the separator for spinner characters
-	// Check up to 3 lines above
+	// Search above the separator (up to 3 lines)
 	searchStart := sepIdx - 3
 	if searchStart < 0 {
 		searchStart = 0
 	}
-
 	for i := sepIdx - 1; i >= searchStart; i-- {
 		line := strings.TrimSpace(lines[i])
 		if hasSpinnerChar(line) {
-			// Extract the text after the spinner character
-			statusText := extractAfterSpinner(line)
-			if statusText != "" {
+			if statusText := extractAfterSpinner(line); statusText != "" {
+				return statusText, true
+			}
+		}
+	}
+
+	// Search below the separator (up to 3 lines)
+	searchEnd := sepIdx + 4
+	if searchEnd > len(lines) {
+		searchEnd = len(lines)
+	}
+	for i := sepIdx + 1; i < searchEnd; i++ {
+		line := strings.TrimSpace(lines[i])
+		if hasSpinnerChar(line) {
+			if statusText := extractAfterSpinner(line); statusText != "" {
 				return statusText, true
 			}
 		}
