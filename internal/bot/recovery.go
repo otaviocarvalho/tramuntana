@@ -48,8 +48,8 @@ func (b *Bot) reconcileState() int {
 
 		// Try to re-resolve by matching display name against live window names
 		displayName, hasName := b.state.GetWindowDisplayName(windowID)
-		if hasName {
-			if newID, ok := nameToID[displayName]; ok {
+		if hasName && displayName != "" {
+			if newID, ok := nameToID[displayName]; ok && newID != windowID {
 				// Re-resolved: update all references
 				reResolveWindow(b.state, windowID, newID)
 				reresolved++
