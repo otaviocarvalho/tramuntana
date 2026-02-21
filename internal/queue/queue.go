@@ -2,6 +2,7 @@ package queue
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -283,8 +284,29 @@ func (q *Queue) mergeFromChannel(text, windowID string, ch chan MessageTask) str
 }
 
 // sendMessage sends a message with MarkdownV2, falling back to plain text.
-// Returns the message ID.
+// Long messages are split at newline boundaries before conversion.
+// Returns the message ID of the last sent message.
 func (q *Queue) sendMessage(chatID int64, threadID int, text string) int {
+	parts := render.SplitMessage(text, 3000)
+
+	var lastMsgID int
+	for i, part := range parts {
+		sendText := part
+		// Add pagination suffix for multi-part messages
+		if len(parts) > 1 {
+			sendText = fmt.Sprintf("%s\n[%d/%d]", part, i+1, len(parts))
+		}
+
+		msgID := q.sendSingleMessage(chatID, threadID, sendText)
+		if msgID != 0 {
+			lastMsgID = msgID
+		}
+	}
+	return lastMsgID
+}
+
+// sendSingleMessage sends a single message with MarkdownV2, falling back to plain text.
+func (q *Queue) sendSingleMessage(chatID int64, threadID int, text string) int {
 	// Try MarkdownV2 first
 	mdv2 := render.ToMarkdownV2(text)
 	msgID, err := q.sendRaw(chatID, threadID, mdv2, "MarkdownV2")
@@ -313,6 +335,7 @@ func (q *Queue) sendRaw(chatID int64, threadID int, text, parseMode string) (int
 	if threadID != 0 {
 		params.AddNonZero("message_thread_id", threadID)
 	}
+	params.AddNonEmpty("link_preview_options", `{"is_disabled":true}`)
 
 	resp, err := q.api.MakeRequest("sendMessage", params)
 	if err != nil {
@@ -345,6 +368,7 @@ func (q *Queue) editRaw(chatID int64, messageID int, text, parseMode string) err
 	if parseMode != "" {
 		params.AddNonEmpty("parse_mode", parseMode)
 	}
+	params.AddNonEmpty("link_preview_options", `{"is_disabled":true}`)
 	_, err := q.api.MakeRequest("editMessageText", params)
 	return err
 }
