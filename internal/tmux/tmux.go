@@ -177,6 +177,40 @@ func KillWindow(session, windowID string) error {
 	return nil
 }
 
+// WaitForReady polls the pane until Claude Code's TUI chrome separator is visible,
+// indicating the TUI is ready to accept input. Returns true if ready, false on timeout.
+func WaitForReady(session, windowID string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		text, err := CapturePane(session, windowID, false)
+		if err == nil && hasChromeSeparator(text) {
+			return true
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return false
+}
+
+// hasChromeSeparator checks if pane text contains Claude Code's chrome separator (≥20 ─ chars).
+func hasChromeSeparator(text string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if len(trimmed) == 0 {
+			continue
+		}
+		count := 0
+		for _, r := range trimmed {
+			if r == '─' || r == '━' {
+				count++
+			}
+		}
+		if count >= 20 {
+			return true
+		}
+	}
+	return false
+}
+
 // DisplayMessage runs tmux display-message and returns the output.
 func DisplayMessage(paneID, format string) (string, error) {
 	cmd := exec.Command("tmux", "display-message", "-t", paneID, "-p", format)

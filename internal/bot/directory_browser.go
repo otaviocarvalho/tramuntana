@@ -279,6 +279,9 @@ func (b *Bot) createWindowForDir(dir string, userID int64, chatID int64, threadI
 		}
 	}
 
+	// Wait for Claude Code TUI to be ready before sending any text
+	tmux.WaitForReady(b.config.TmuxSessionName, windowID, 15*time.Second)
+
 	// Bind thread to window
 	userIDStr := strconv.FormatInt(userID, 10)
 	threadIDStr := strconv.Itoa(threadID)
