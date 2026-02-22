@@ -76,18 +76,25 @@ func NewWindow(session, name, dir, claudeCmd string, env map[string]string) (str
 	}
 	windowID := strings.TrimSpace(string(out))
 
-	// Set environment variables inside the tmux window
+	// Set environment variables inside the tmux window.
+	// Use both set-environment (for tmux-level inheritance) and
+	// send-keys export (for the current shell and its children).
+	target := session + ":" + windowID
 	for k, v := range env {
-		target := session + ":" + windowID
+		// Expand $PATH references against the current process environment
+		expanded := os.ExpandEnv(v)
+		// tmux set-environment -t window for new panes/processes
+		setEnvCmd := exec.Command("tmux", "set-environment", "-t", target, k, expanded)
+		_ = setEnvCmd.Run()
+		// Also export in the running shell
 		setCmd := exec.Command("tmux", "send-keys", "-t", target,
-			fmt.Sprintf("export %s=%q", k, v), "Enter")
+			fmt.Sprintf("export %s=%q", k, expanded), "Enter")
 		_ = setCmd.Run()
 	}
 
 	// Start Claude
 	if claudeCmd != "" {
 		time.Sleep(200 * time.Millisecond)
-		target := session + ":" + windowID
 		startCmd := exec.Command("tmux", "send-keys", "-t", target, claudeCmd, "Enter")
 		if err := startCmd.Run(); err != nil {
 			return windowID, fmt.Errorf("starting claude in %s: %w", windowID, err)

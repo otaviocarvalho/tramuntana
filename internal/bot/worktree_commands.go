@@ -121,6 +121,7 @@ func (b *Bot) handlePickwCommand(msg *tgbotapi.Message) {
 }
 
 // getRepoRoot returns the git repo root for the current window's CWD.
+// If the CWD itself is not a git repo, it tries CWD/<project> as a fallback.
 func (b *Bot) getRepoRoot(msg *tgbotapi.Message) (string, error) {
 	windowID, bound := b.resolveWindow(msg)
 	if !bound {
@@ -130,7 +131,23 @@ func (b *Bot) getRepoRoot(msg *tgbotapi.Message) (string, error) {
 	if !ok || ws.CWD == "" {
 		return "", fmt.Errorf("no CWD known for current session")
 	}
-	return git.RepoRoot(ws.CWD)
+
+	// Try CWD directly
+	root, err := git.RepoRoot(ws.CWD)
+	if err == nil {
+		return root, nil
+	}
+
+	// Fallback: try CWD/<project> (e.g. /home/user/code/terminal-game)
+	threadIDStr := strconv.Itoa(getThreadID(msg))
+	if project, ok := b.state.GetProject(threadIDStr); ok {
+		projectDir := filepath.Join(ws.CWD, project)
+		if root, err := git.RepoRoot(projectDir); err == nil {
+			return root, nil
+		}
+	}
+
+	return "", fmt.Errorf("git rev-parse --show-toplevel in %s: not a git repository", ws.CWD)
 }
 
 // waitForSessionMap polls for a session_map entry matching the given window ID.
