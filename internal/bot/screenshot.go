@@ -78,6 +78,12 @@ func (b *Bot) handleScreenshotCommand(msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
 	threadID := getThreadID(msg)
 
+	// Check flood control before doing expensive work
+	if b.msgQueue != nil && b.msgQueue.IsFlooded(chatID) {
+		b.reply(chatID, threadID, "Rate limited by Telegram. Try again in a moment.")
+		return
+	}
+
 	paneText, err := tmux.CapturePane(b.config.TmuxSessionName, windowID, true)
 	if err != nil {
 		if tmux.IsWindowDead(err) {
@@ -100,7 +106,10 @@ func (b *Bot) handleScreenshotCommand(msg *tgbotapi.Message) {
 	sentMsg, err := b.sendDocumentInThread(chatID, threadID, pngData, "screenshot.png", keyboard)
 	if err != nil {
 		log.Printf("Error sending screenshot: %v", err)
-		b.reply(chatID, threadID, "Error: failed to send screenshot.")
+		// Register flood ban so queue and future screenshots respect it
+		if b.msgQueue != nil {
+			b.msgQueue.HandleFloodError(chatID, err)
+		}
 		return
 	}
 
@@ -118,6 +127,11 @@ func (b *Bot) handleScreenshotCommand(msg *tgbotapi.Message) {
 func (b *Bot) handleScreenshotCB(cq *tgbotapi.CallbackQuery) {
 	action, windowID, ok := parseSSCallbackData(cq.Data)
 	if !ok {
+		return
+	}
+
+	// Check flood control before hitting Telegram API
+	if b.msgQueue != nil && cq.Message != nil && b.msgQueue.IsFlooded(cq.Message.Chat.ID) {
 		return
 	}
 
@@ -172,6 +186,9 @@ func (b *Bot) refreshScreenshot(cq *tgbotapi.CallbackQuery, windowID string) {
 
 	if err := b.editMessageMedia(chatID, messageID, pngData, "screenshot.png", keyboard); err != nil {
 		log.Printf("Error editing screenshot message: %v", err)
+		if b.msgQueue != nil {
+			b.msgQueue.HandleFloodError(chatID, err)
+		}
 	}
 }
 

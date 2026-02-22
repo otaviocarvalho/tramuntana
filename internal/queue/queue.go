@@ -113,13 +113,21 @@ func (q *Queue) worker(userID int64, ch chan MessageTask) {
 }
 
 func (q *Queue) processTask(task MessageTask, ch chan MessageTask) {
-	// Check flood control
-	if q.flood.IsFlooded(task.UserID) {
-		if task.ContentType == "status_update" || task.ContentType == "status_clear" {
-			log.Printf("Flood control: dropping %s for user %d", task.ContentType, task.UserID)
+	// Check flood control using chatID (flood bans are keyed by chatID, not userID)
+	if q.flood.IsFlooded(task.ChatID) {
+		switch task.ContentType {
+		case "status_update", "status_clear", "tool_use":
+			// Drop low-value messages during floods — they'll be stale by the time flood clears
 			return
+		case "tool_result":
+			// Drop tool_result too — the tool_use message it would edit was likely dropped
+			return
+		default:
+			// Content messages: wait for flood to clear
+			q.flood.WaitIfFlooded(task.ChatID)
+			// After waking, drain stale messages from the buffer
+			q.drainStale(task.ChatID, ch)
 		}
-		q.flood.WaitIfFlooded(task.UserID)
 	}
 
 	switch task.ContentType {
@@ -276,6 +284,48 @@ func (q *Queue) mergeFromChannel2(text, windowID string, ch chan MessageTask) (s
 	}
 }
 
+// drainStale drains stale low-priority messages from the channel after a flood wait.
+// This prevents a burst of stale tool_use/tool_result/status messages from being sent
+// immediately after the flood clears, which would trigger another flood ban.
+func (q *Queue) drainStale(chatID int64, ch chan MessageTask) {
+	drained := 0
+	for {
+		select {
+		case msg, ok := <-ch:
+			if !ok {
+				return
+			}
+			switch msg.ContentType {
+			case "status_update", "status_clear", "tool_use", "tool_result":
+				drained++
+				continue
+			default:
+				// Put back content messages by processing them
+				if drained > 0 {
+					log.Printf("Drained %d stale messages after flood for chat %d", drained, chatID)
+				}
+				q.processTask(msg, ch)
+				return
+			}
+		default:
+			if drained > 0 {
+				log.Printf("Drained %d stale messages after flood for chat %d", drained, chatID)
+			}
+			return
+		}
+	}
+}
+
+// IsFlooded returns true if a chat is currently flood-banned.
+func (q *Queue) IsFlooded(chatID int64) bool {
+	return q.flood.IsFlooded(chatID)
+}
+
+// HandleFloodError registers a flood ban for an external 429 error (e.g. from screenshot sends).
+func (q *Queue) HandleFloodError(chatID int64, err error) {
+	q.flood.HandleError(chatID, err)
+}
+
 // sendMessage sends a message with MarkdownV2, falling back to plain text.
 // Long messages are split at newline boundaries before conversion.
 // Returns the message ID of the last sent message.
@@ -370,6 +420,13 @@ func (q *Queue) editMessage(chatID int64, messageID int, text string) error {
 		return nil
 	}
 
+	if isPermanentError(err) {
+		return err
+	}
+
+	// Wait for flood to clear before plain text fallback
+	q.flood.WaitIfFlooded(chatID)
+
 	plain := render.ToPlainText(text)
 	return q.editRaw(chatID, messageID, plain, "")
 }
@@ -384,6 +441,9 @@ func (q *Queue) editRaw(chatID int64, messageID int, text, parseMode string) err
 	}
 	params.AddNonEmpty("link_preview_options", `{"is_disabled":true}`)
 	_, err := q.api.MakeRequest("editMessageText", params)
+	if err != nil {
+		q.flood.HandleError(chatID, err)
+	}
 	return err
 }
 

@@ -101,6 +101,7 @@ func runServe() error {
 
 	// Create message queue
 	q := queue.New(b.API())
+	b.SetQueue(q)
 
 	// Create session monitor
 	mon := monitor.New(cfg, b.State(), ms, q)

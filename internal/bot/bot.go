@@ -10,6 +10,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/otaviocarvalho/tramuntana/internal/config"
 	"github.com/otaviocarvalho/tramuntana/internal/minuano"
+	"github.com/otaviocarvalho/tramuntana/internal/queue"
 	"github.com/otaviocarvalho/tramuntana/internal/state"
 	"github.com/otaviocarvalho/tramuntana/internal/tmux"
 )
@@ -37,6 +38,8 @@ type Bot struct {
 	monitorState *state.MonitorState
 	// Minuano CLI bridge
 	minuanoBridge *minuano.Bridge
+	// Message queue (set after construction via SetQueue)
+	msgQueue *queue.Queue
 }
 
 // New creates a new Bot instance.
@@ -223,4 +226,9 @@ func (b *Bot) State() *state.State {
 // Config returns the bot's config.
 func (b *Bot) Config() *config.Config {
 	return b.config
+}
+
+// SetQueue sets the message queue reference for flood control checks.
+func (b *Bot) SetQueue(q *queue.Queue) {
+	b.msgQueue = q
 }

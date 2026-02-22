@@ -141,6 +141,9 @@ func (b *Bot) sendMessageInThread(chatID int64, threadID int, text string) (tgbo
 
 	resp, err := b.api.MakeRequest("sendMessage", params)
 	if err != nil {
+		if b.msgQueue != nil {
+			b.msgQueue.HandleFloodError(chatID, err)
+		}
 		return tgbotapi.Message{}, err
 	}
 
