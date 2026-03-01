@@ -61,7 +61,6 @@ func TestTaskJSON_WithOptionalFields(t *testing.T) {
 		"body": "",
 		"status": "claimed",
 		"priority": 3,
-		"capability": "code",
 		"claimed_by": "agent-1",
 		"project_id": "proj-1",
 		"attempt": 1,
@@ -70,9 +69,6 @@ func TestTaskJSON_WithOptionalFields(t *testing.T) {
 	var task Task
 	if err := json.Unmarshal([]byte(jsonStr), &task); err != nil {
 		t.Fatal(err)
-	}
-	if task.Capability == nil || *task.Capability != "code" {
-		t.Error("Capability should be 'code'")
 	}
 	if task.ClaimedBy == nil || *task.ClaimedBy != claimedBy {
 		t.Error("ClaimedBy should be set")

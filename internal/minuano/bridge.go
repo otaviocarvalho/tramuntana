@@ -27,7 +27,6 @@ type Task struct {
 	Body        string     `json:"body"`
 	Status      string     `json:"status"`
 	Priority    int        `json:"priority"`
-	Capability  *string    `json:"capability,omitempty"`
 	ClaimedBy   *string    `json:"claimed_by,omitempty"`
 	ProjectID   *string    `json:"project_id,omitempty"`
 	Attempt     int        `json:"attempt"`
