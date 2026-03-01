@@ -24,6 +24,7 @@ type Config struct {
 	QueueTopicID        int64
 	ApprovalsTopicID    int64
 	DefaultProject      string
+	PlannerPromptPath   string
 }
 
 func Load(envFile ...string) (*Config, error) {
@@ -100,6 +101,11 @@ func Load(envFile ...string) (*Config, error) {
 
 	defaultProject := os.Getenv("TRAMUNTANA_DEFAULT_PROJECT")
 
+	plannerPromptPath := os.Getenv("TRAMUNTANA_PLANNER_PROMPT")
+	if plannerPromptPath == "" {
+		plannerPromptPath = "/home/otavio/code/minuano/claude/planner-system-prompt.md"
+	}
+
 	return &Config{
 		TelegramBotToken:    token,
 		AllowedUsers:        users,
@@ -114,6 +120,7 @@ func Load(envFile ...string) (*Config, error) {
 		QueueTopicID:        queueTopicID,
 		ApprovalsTopicID:    approvalsTopicID,
 		DefaultProject:      defaultProject,
+		PlannerPromptPath:   plannerPromptPath,
 	}, nil
 }
 

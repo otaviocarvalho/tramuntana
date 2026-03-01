@@ -3,10 +3,13 @@ package bot
 import (
 	"fmt"
 	"log"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/otaviocarvalho/tramuntana/internal/tmux"
 )
 
 // handlePlannerCommand is the entry point for /plan.
@@ -19,13 +22,13 @@ func (b *Bot) handlePlannerCommand(msg *tgbotapi.Message) {
 	parts := strings.Fields(subcommand)
 
 	if len(parts) == 0 {
-		b.plannerStart(chatID, threadID, topicIDStr, "")
+		b.plannerStart(msg, chatID, threadID, topicIDStr, "")
 		return
 	}
 
 	switch parts[0] {
 	case "reopen":
-		b.plannerReopen(chatID, threadID, topicIDStr)
+		b.plannerReopen(msg, chatID, threadID, topicIDStr)
 	case "release":
 		b.plannerRelease(chatID, threadID, topicIDStr)
 	case "stop":
@@ -34,16 +37,16 @@ func (b *Bot) handlePlannerCommand(msg *tgbotapi.Message) {
 		b.plannerStatus(chatID, threadID, topicIDStr)
 	default:
 		// Treat the whole argument as the project flag: /plan <project>
-		b.plannerStart(chatID, threadID, topicIDStr, parts[0])
+		b.plannerStart(msg, chatID, threadID, topicIDStr, parts[0])
 	}
 }
 
-func (b *Bot) plannerStart(chatID int64, threadID int, topicIDStr, project string) {
+// plannerStart creates a new Telegram topic and tmux window for the planner.
+func (b *Bot) plannerStart(msg *tgbotapi.Message, chatID int64, threadID int, topicIDStr, project string) {
 	if project == "" {
 		project = b.config.DefaultProject
 	}
 	if project == "" {
-		// Try bound project
 		project, _ = b.state.GetProject(topicIDStr)
 	}
 	if project == "" {
@@ -51,30 +54,107 @@ func (b *Bot) plannerStart(chatID int64, threadID int, topicIDStr, project strin
 		return
 	}
 
-	out, err := b.minuanoBridge.Run("planner", "start", "--topic", topicIDStr, "--project", project)
+	b.reply(chatID, threadID, fmt.Sprintf("Creating planner for %s...", project))
+
+	// Create a new Telegram forum topic for the planner
+	topicName := fmt.Sprintf("Planner: %s", project)
+	newThreadID, err := b.createForumTopic(chatID, topicName)
 	if err != nil {
-		if strings.Contains(err.Error(), "already running") {
-			b.reply(chatID, threadID, "Planner already running here. Use /plan stop first.")
-			return
-		}
-		log.Printf("planner start error: %v", err)
-		b.reply(chatID, threadID, fmt.Sprintf("Error starting planner: %v", err))
+		b.reply(chatID, threadID, fmt.Sprintf("Error creating planner topic: %v", err))
 		return
 	}
 
-	_ = out
-	b.reply(chatID, threadID, "Planner session started. Send your goals and I will create draft tasks.")
+	// Resolve working directory from the current topic's window (if bound)
+	dir := b.resolvePlannerDir(msg)
+
+	// Build environment with Minuano vars
+	env := b.buildMinuanoEnv(fmt.Sprintf("planner-%s", project))
+	if env == nil {
+		env = make(map[string]string)
+	}
+	env["MINUANO_PROJECT"] = project
+
+	// Build planner Claude command
+	claudeCmd := fmt.Sprintf("%s --dangerously-skip-permissions --system-prompt \"$(cat %s)\"",
+		b.config.ClaudeCommand, b.config.PlannerPromptPath)
+
+	// Create tmux window with the planner Claude command
+	windowID, err := tmux.NewWindow(b.config.TmuxSessionName, topicName, dir, claudeCmd, env)
+	if err != nil {
+		b.reply(chatID, threadID, fmt.Sprintf("Error creating planner window: %v", err))
+		return
+	}
+
+	// Clean up _init placeholder if present
+	tmux.CleanupInitWindow(b.config.TmuxSessionName)
+
+	// Wait for Claude Code TUI to be ready
+	tmux.WaitForReady(b.config.TmuxSessionName, windowID, 15*time.Second)
+
+	// Bind the new topic to the planner window
+	userIDStr := strconv.FormatInt(msg.From.ID, 10)
+	newThreadIDStr := strconv.Itoa(newThreadID)
+	b.state.BindThread(userIDStr, newThreadIDStr, windowID)
+	b.state.SetGroupChatID(userIDStr, newThreadIDStr, chatID)
+	b.state.BindProject(newThreadIDStr, project)
+	b.state.SetWindowDisplayName(windowID, topicName)
+	b.saveState()
+
+	// Note: we don't call `minuano planner start` here because it creates
+	// a duplicate tmux window in the minuano session. The planner runs
+	// entirely within Tramuntana's session management.
+
+	b.reply(chatID, newThreadID, "Planner ready. Send your goals and I'll create draft tasks.\nUse /plan release when done to start execution.")
+	b.reply(chatID, threadID, fmt.Sprintf("Planner topic created for %s.", project))
 }
 
-func (b *Bot) plannerReopen(chatID int64, threadID int, topicIDStr string) {
-	out, err := b.minuanoBridge.Run("planner", "reopen", "--topic", topicIDStr)
+// resolvePlannerDir returns the working directory for the planner.
+// Uses the current topic's window CWD if available, otherwise falls back to home.
+func (b *Bot) resolvePlannerDir(msg *tgbotapi.Message) string {
+	userID := strconv.FormatInt(msg.From.ID, 10)
+	threadID := strconv.Itoa(getThreadID(msg))
+
+	if windowID, bound := b.state.GetWindowForThread(userID, threadID); bound {
+		if ws, ok := b.state.GetWindowState(windowID); ok && ws.CWD != "" {
+			return ws.CWD
+		}
+	}
+
+	home, err := filepath.Abs(".")
 	if err != nil {
-		log.Printf("planner reopen error: %v", err)
-		b.reply(chatID, threadID, fmt.Sprintf("Error: %v", err))
+		return "/tmp"
+	}
+	return home
+}
+
+func (b *Bot) plannerReopen(msg *tgbotapi.Message, chatID int64, threadID int, topicIDStr string) {
+	project, _ := b.state.GetProject(topicIDStr)
+	if project == "" {
+		project = b.config.DefaultProject
+	}
+
+	// Check if topic already has a bound window — just restart Claude in it
+	userID := strconv.FormatInt(msg.From.ID, 10)
+	if windowID, bound := b.state.GetWindowForThread(userID, topicIDStr); bound {
+		// Window exists, try to restart Claude in it
+		claudeCmd := fmt.Sprintf("%s --dangerously-skip-permissions --system-prompt \"$(cat %s)\"",
+			b.config.ClaudeCommand, b.config.PlannerPromptPath)
+		if err := tmux.SendKeysWithDelay(b.config.TmuxSessionName, windowID, claudeCmd, 500); err != nil {
+			if tmux.IsWindowDead(err) {
+				// Window is dead, fall through to create new one
+				b.plannerStart(msg, chatID, threadID, topicIDStr, project)
+				return
+			}
+			b.reply(chatID, threadID, fmt.Sprintf("Error reopening planner: %v", err))
+			return
+		}
+
+		b.reply(chatID, threadID, "Planner session reopened.")
 		return
 	}
-	_ = out
-	b.reply(chatID, threadID, "Planner session reopened.")
+
+	// No window bound — start fresh
+	b.plannerStart(msg, chatID, threadID, topicIDStr, project)
 }
 
 func (b *Bot) plannerRelease(chatID int64, threadID int, topicIDStr string) {
@@ -96,11 +176,11 @@ func (b *Bot) plannerRelease(chatID int64, threadID int, topicIDStr string) {
 
 	// Get tree for confirmation
 	tree, _ := b.minuanoBridge.Run("tree", "--project", project)
-	msg := strings.TrimSpace(out)
+	result := strings.TrimSpace(out)
 	if tree != "" {
-		msg += "\n\n" + strings.TrimSpace(tree)
+		result += "\n\n" + strings.TrimSpace(tree)
 	}
-	b.reply(chatID, threadID, msg)
+	b.reply(chatID, threadID, result)
 }
 
 func (b *Bot) plannerStop(chatID int64, threadID int, topicIDStr string) {
